@@ -1,0 +1,301 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Voice Assistant</title>
+<style>
+  /* ── Reset & base ── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #fafafa;
+    --surface:   #ffffff;
+    --border:    #eaeaea;
+    --text:      #111111;
+    --muted:     #888888;
+    --accent:    #000000;      /* Minimalist solid black */
+    --accent-2:  #222222;
+    --green:     #10b981;      /* Emerald green for listening */
+    --amber:     #f59e0b;      /* Soft amber for speaking */
+    --radius:    8px;          /* Minimalist sharp corners */
+    --shadow:    0 8px 30px rgba(0,0,0,0.03), 0 1px 3px rgba(0,0,0,0.02);
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    min-height: 100dvh;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 1rem;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  /* ── Card ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    box-shadow: var(--shadow);
+    width: 100%;
+    max-width: 400px;
+    padding: 3rem 2.25rem 2.25rem;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 2rem;
+  }
+
+  /* ── Header ── */
+  .header { text-align: center; }
+  .header h1 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    letter-spacing: -.02em;
+    color: var(--text);
+  }
+  .header p {
+    margin-top: .4rem;
+    font-size: .8rem;
+    color: var(--muted);
+  }
+
+  /* ── Orb button ── */
+  .orb-wrap {
+    position: relative;
+    width: 110px;
+    height: 110px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+  }
+
+  /* Ripple rings — shown only when active */
+  .orb-wrap::before,
+  .orb-wrap::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    border: 1px solid var(--accent);
+    opacity: 0;
+    transition: opacity .3s;
+  }
+
+  .orb-wrap.active::before {
+    animation: ring 2s cubic-bezier(0.16, 1, 0.3, 1) infinite;
+  }
+  .orb-wrap.active::after {
+    animation: ring 2s cubic-bezier(0.16, 1, 0.3, 1) .7s infinite;
+  }
+
+  @keyframes ring {
+    0%   { transform: scale(1);   opacity: .15; }
+    100% { transform: scale(1.6); opacity: 0;   }
+  }
+
+  #btn {
+    width: 76px;
+    height: 76px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    cursor: pointer;
+    font-size: 1.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all .2s cubic-bezier(0.16, 1, 0.3, 1);
+    position: relative;
+    z-index: 1;
+
+    background: var(--accent);
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    color: #fff;
+  }
+
+  #btn:hover  { transform: scale(1.04); box-shadow: 0 6px 16px rgba(0,0,0,0.12); }
+  #btn:active { transform: scale(.98);  }
+
+  #btn.listening {
+    background: var(--green);
+    border-color: var(--green);
+    box-shadow: 0 0 20px rgba(16,185,129,.2);
+    animation: pulse-green 1.4s ease-in-out infinite;
+  }
+
+  #btn.speaking {
+    background: var(--amber);
+    border-color: var(--amber);
+    box-shadow: 0 0 20px rgba(245,158,11,.2);
+    animation: pulse-amber 1s ease-in-out infinite;
+  }
+
+  @keyframes pulse-green {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(16,185,129,.2); }
+    50%       { box-shadow: 0 0 0 10px rgba(16,185,129,0); }
+  }
+  @keyframes pulse-amber {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,.2); }
+    50%       { box-shadow: 0 0 0 10px rgba(245,158,11,0); }
+  }
+
+  /* Dot animation inside button */
+  .dots {
+    display: flex;
+    gap: 4px;
+    align-items: center;
+  }
+  .dots span {
+    width: 6px; height: 6px;
+    border-radius: 50%;
+    background: #fff;
+    animation: bounce .8s ease-in-out infinite;
+  }
+  .dots span:nth-child(2) { animation-delay: .15s; }
+  .dots span:nth-child(3) { animation-delay: .3s; }
+  @keyframes bounce {
+    0%, 80%, 100% { transform: translateY(0); }
+    40%            { transform: translateY(-5px); }
+  }
+
+  /* ── Status line ── */
+  #status {
+    font-size: .8rem;
+    color: var(--muted);
+    font-weight: 500;
+    letter-spacing: .01em;
+    min-height: 1.2em;
+    text-align: center;
+    transition: color .2s;
+  }
+  #status.listening { color: var(--green); }
+  #status.speaking  { color: var(--amber); }
+
+  /* ── Transcript bubble ── */
+  #transcript-wrap {
+    width: 100%;
+    display: none;
+    flex-direction: column;
+    gap: .75rem;
+    max-height: 220px;
+    overflow-y: auto;
+    padding-right: 4px;
+    border-top: 1px solid var(--border);
+    padding-top: 1.25rem;
+  }
+  #transcript-wrap.visible { display: flex; }
+  #transcript-wrap::-webkit-scrollbar { width: 3px; }
+  #transcript-wrap::-webkit-scrollbar-thumb { background: #e5e5e5; border-radius: 3px; }
+
+  .bubble {
+    padding: .5rem .75rem;
+    border-radius: var(--radius);
+    font-size: .8rem;
+    line-height: 1.4;
+    max-width: 90%;
+    word-break: break-word;
+  }
+  .bubble.user {
+    background: var(--accent);
+    color: #fff;
+    align-self: flex-end;
+    border-bottom-right-radius: 0;
+  }
+  .bubble.bot {
+    background: #f4f4f5;
+    color: var(--text);
+    border: 1px solid var(--border);
+    align-self: flex-start;
+    border-bottom-left-radius: 0;
+  }
+
+  /* ── Footer note ── */
+  .footer-note {
+    font-size: .7rem;
+    color: var(--muted);
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<div class="card">
+
+  <div class="header">
+    <h1>Voice Assistant</h1>
+    <p>Tap the button and start speaking</p>
+  </div>
+
+  <div class="orb-wrap" id="orbWrap">
+    <button id="btn" aria-label="Start voice session"></button>
+  </div>
+
+  <div id="status">Ready</div>
+
+  <div id="transcript-wrap"></div>
+
+</div>
+
+<!-- scripts -->
+<script src="/static/chat.js?v=1"></script>
+
+<script>
+  
+  const orbWrap    = document.getElementById('orbWrap');
+//   const btn        = document.getElementById('btn');
+  const statusEl   = document.getElementById('status');
+  const txWrap     = document.getElementById('transcript-wrap');
+
+  window.uiSetIdle = function () {
+    orbWrap.classList.remove('active');
+    btn.classList.remove('listening', 'speaking');
+    btn.innerHTML = 'Ready';
+    statusEl.textContent = 'Ready';
+    statusEl.className = '';
+  };
+
+  window.uiSetActive = function () {          
+    orbWrap.classList.add('active');
+    btn.classList.remove('speaking');
+    btn.classList.add('listening');
+    btn.innerHTML = '<div class="dots"><span></span><span></span><span></span></div>';
+    statusEl.textContent = 'Listening…';
+    statusEl.className = 'listening';
+  };
+
+  window.uiSetBotSpeaking = function () {
+    btn.classList.remove('listening');
+    btn.classList.add('speaking');
+    btn.innerHTML = 'speaking';
+    statusEl.textContent = 'Speaking…';
+    statusEl.className = 'speaking';
+  };
+
+  window.uiSetConnecting = function () {
+    orbWrap.classList.add('active');
+    btn.classList.remove('listening', 'speaking');
+    btn.innerHTML = '<div class="dots"><span></span><span></span><span></span></div>';
+    statusEl.textContent = 'Connecting…';
+    statusEl.className = '';
+  };
+
+  window.uiAddBubble = function (role, text) {
+    txWrap.classList.add('visible');
+    const d = document.createElement('div');
+    d.className = `bubble ${role}`;
+    d.textContent = text;
+    txWrap.appendChild(d);
+    txWrap.scrollTop = txWrap.scrollHeight;
+  };
+
+  window.uiClearTranscript = function () {
+    txWrap.innerHTML = '';
+    txWrap.classList.remove('visible');
+  };
+</script>
+
+</body>
+</html>

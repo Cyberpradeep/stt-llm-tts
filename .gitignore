@@ -1,0 +1,7 @@
+/.python-version
+/.venv
+/main.py
+/pyproject.toml
+/README.md
+/temp.py
+/uv.lock

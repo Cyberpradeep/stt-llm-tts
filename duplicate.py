@@ -57,33 +57,13 @@ from pipecat.turns.user_mute import MuteUntilFirstBotCompleteUserMuteStrategy
 # from pipecat.services.google import GoogleTTSService
 # from pipecat.transcriptions.language import Language
 from pipecat.services.openai.tts import OpenAITTSService
-from pipecat.services.deepgram.stt import DeepgramSTTService
-# from pipecat.audio.filters.rnnoise_filter import RNNoiseFilter
 
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))  # goes up to stt-llm-tts/
 load_dotenv()
 
 logger.remove(0)
-logger.add(sys.stderr, level="DEBUG")  
-logger.add(
-    "logs/app.log",
-    level="DEBUG",
-    rotation="10 MB",
-    retention="7 days",
-    compression="zip",
-    enqueue=True,
-    mode="a",
-    format="{time:YYYY-MM-DD HH:mm:ss.SSS} | {level:<8} | {name}:{function}:{line} - {message}",
-)
-logger.level("SESSION", no=25, color="<green>", icon="🟢")
-
-def log_session_separator():
-    session_id = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    logger.log("SESSION", "\n\n" + "=" * 60)
-    logger.log("SESSION", f"NEW SESSION STARTED — {session_id}")
-    logger.log("SESSION", "=" * 60)
-
+logger.add(sys.stderr, level="DEBUG")   
 
 AUDIO_IN_SAMPLE_RATE  = 16_000   
 AUDIO_OUT_SAMPLE_RATE = 24_000   
@@ -192,129 +172,6 @@ app.mount("/static", StaticFiles(directory=os.path.join(BASE_DIR, "frontend/stat
 
 #---Function Calling---
 
-# async def book_appointment(name, age, gender, phone, doctor, date=None, boo_k_time=None, reason=None):
-#     async with SessionLocal() as session:
-#         try:
-#             if date:
-#                 for fmt in ("%d-%m-%Y", "%d/%m/%Y", "%Y-%m-%d"):
-#                     try:
-#                         date = datetime.strptime(date, fmt).strftime("%Y-%m-%d")
-#                         break
-#                     except ValueError:
-#                         pass
-#             print("booking appointment called")
-#             if not boo_k_time:
-#                 return "get the time for booking appointment"
-#             if not reason:
-#                 return "get the reason for booking appointment"
-#             if not date:
-#                 return "get the date for booking appointment"
-#             book_date = datetime.strptime(date, "%Y-%m-%d").date()
-
-#             for fmt in ("%H:%M", "%I:%M %p", "%I:%M%p"):
-#                 try:
-#                     book_time = datetime.strptime(boo_k_time.strip(), fmt).time()
-#                     break
-#                 except ValueError:
-#                     pass
-#             else:
-#                 return f"Invalid time format: {boo_k_time}. Please provide time like 10:45 AM or 14:30"
-
-#             boo_k_time = book_time.strftime("%H:%M")
-#             clean_doctor = doctor.replace("Dr.", "").replace("Dr ", "").strip()
-            
-#             stmt_doc = select(Doctor).filter(Doctor.name.ilike(f"%{clean_doctor}%"))
-#             res_doc = await session.execute(stmt_doc)
-#             doctor_obj = res_doc.scalars().first()
-            
-#             print(f"clean doctor name: {clean_doctor}, doctor found: {doctor_obj.name if doctor_obj else 'None'}")
-#             print("time :", boo_k_time)
-            
-#             stmt_p_exist = select(Patient).filter_by(phone=phone)
-#             res_p_exist = await session.execute(stmt_p_exist)
-#             phone_exist = res_p_exist.scalars().first()
-
-#             if phone_exist and phone_exist.name != name:
-#                 print("phone number exist")
-#                 return f"Phone number {phone} is already exist for another patient, please provide a different phone number"
-
-#             if not doctor_obj:
-#                 return f"Doctor not found: {doctor}"
-
-#             if len(phone) < 10 or len(phone) > 10:
-#                 return f"Phone number {phone} is not valid and ask the user once again tell your phone number "
-
-#             if book_date < datetime.now().date():
-#                 return f"Date {book_date} is not valid the date has already passed"
-
-#             if doctor_obj.work_brk_st_time <= book_time <= doctor_obj.work_brk_end_time:
-#                 return f"Doctor is on break during {boo_k_time}"
-
-#             if not (doctor_obj.work_st_time <= book_time <= doctor_obj.work_end_time):
-#                 return f"Doctor is not available at {boo_k_time}"
-
-#             stmt_booked = select(Appointment).filter_by(doctor_id=doctor_obj.id, date=book_date, time=book_time)
-#             res_booked = await session.execute(stmt_booked)
-#             already_booked = res_booked.scalars().first()
-
-#             if already_booked:
-#                 return f"Doctor is already booked at {boo_k_time} on {date}"
-
-#             stmt_pat = select(Patient).filter_by(phone=phone)
-#             res_pat = await session.execute(stmt_pat)
-#             patient = res_pat.scalars().first()
-
-#             if patient:
-#                 stmt_existing = select(Appointment).filter_by(
-#                     patient_id=patient.id,
-#                     doctor_id=doctor_obj.id,
-#                     date=book_date,
-#                     time=book_time
-#                 )
-#                 res_existing = await session.execute(stmt_existing)
-#                 existing = res_existing.scalars().first()
-#                 if existing:
-#                     return f"You have already booked an appointment with Dr. {doctor} on {date} at {boo_k_time}"
-
-#             if not patient:
-#                 patient = Patient(
-#                     name=name,
-#                     age=age,
-#                     gender=gender,
-#                     phone=phone
-#                 )
-#                 session.add(patient)
-#                 await session.commit()
-#                 await session.refresh(patient)
-
-#             new_apt = Appointment(
-#                 patient_id=patient.id,
-#                 doctor_id=doctor_obj.id,
-#                 date=book_date,
-#                 time=book_time,
-#                 reason=reason
-#             )
-#             session.add(new_apt)
-#             await session.commit()
-#             await session.refresh(new_apt)
-
-#             print("booking confirmed")
-#             return {
-#                 "status": "success",
-#                 "data": {
-#                     "name": name,
-#                     "doctor": doctor_obj.name,
-#                     "date": date,
-#                     "time": boo_k_time,
-#                     "reason": reason,
-#                     "appointment_id": new_apt.id,
-#                 }
-#             }
-#         except Exception as e:
-#             print(f"booking appoint err: str{e}")
-#             await session.rollback()
-#             return f"Error {str(e)}"
-
 async def book_appointment(name, age, gender, phone, doctor, date=None, boo_k_time=None, reason=None):
     async with SessionLocal() as session:
         try:
@@ -325,14 +182,13 @@ async def book_appointment(name, age, gender, phone, doctor, date=None, boo_k_ti
                         break
                     except ValueError:
                         pass
-
+            print("booking appointment called")
             if not boo_k_time:
                 return "get the time for booking appointment"
             if not reason:
                 return "get the reason for booking appointment"
             if not date:
                 return "get the date for booking appointment"
-
             book_date = datetime.strptime(date, "%Y-%m-%d").date()
 
             for fmt in ("%H:%M", "%I:%M %p", "%I:%M%p"):
@@ -342,27 +198,34 @@ async def book_appointment(name, age, gender, phone, doctor, date=None, boo_k_ti
                 except ValueError:
                     pass
             else:
-                return f"Invalid time format: {boo_k_time}."
+                return f"Invalid time format: {boo_k_time}. Please provide time like 10:45 AM or 14:30"
 
             boo_k_time = book_time.strftime("%H:%M")
             clean_doctor = doctor.replace("Dr.", "").replace("Dr ", "").strip()
-
+            
             stmt_doc = select(Doctor).filter(Doctor.name.ilike(f"%{clean_doctor}%"))
             res_doc = await session.execute(stmt_doc)
             doctor_obj = res_doc.scalars().first()
+            
+            print(f"clean doctor name: {clean_doctor}, doctor found: {doctor_obj.name if doctor_obj else 'None'}")
+            print("time :", boo_k_time)
+            
+            stmt_p_exist = select(Patient).filter_by(phone=phone)
+            res_p_exist = await session.execute(stmt_p_exist)
+            phone_exist = res_p_exist.scalars().first()
+
+            if phone_exist and phone_exist.name != name:
+                print("phone number exist")
+                return f"Phone number {phone} is already exist for another patient, please provide a different phone number"
 
             if not doctor_obj:
                 return f"Doctor not found: {doctor}"
 
-            # ✅ Capture name BEFORE any commit/refresh
-            doctor_name = doctor_obj.name
-            doctor_id = doctor_obj.id
-
             if len(phone) < 10 or len(phone) > 10:
-                return f"Phone number {phone} is not valid"
+                return f"Phone number {phone} is not valid and ask the user once again tell your phone number "
 
             if book_date < datetime.now().date():
-                return f"Date {book_date} has already passed"
+                return f"Date {book_date} is not valid the date has already passed"
 
             if doctor_obj.work_brk_st_time <= book_time <= doctor_obj.work_brk_end_time:
                 return f"Doctor is on break during {boo_k_time}"
@@ -370,19 +233,12 @@ async def book_appointment(name, age, gender, phone, doctor, date=None, boo_k_ti
             if not (doctor_obj.work_st_time <= book_time <= doctor_obj.work_end_time):
                 return f"Doctor is not available at {boo_k_time}"
 
-            stmt_booked = select(Appointment).filter_by(
-                doctor_id=doctor_id, date=book_date, time=book_time
-            )
+            stmt_booked = select(Appointment).filter_by(doctor_id=doctor_obj.id, date=book_date, time=book_time)
             res_booked = await session.execute(stmt_booked)
-            if res_booked.scalars().first():
+            already_booked = res_booked.scalars().first()
+
+            if already_booked:
                 return f"Doctor is already booked at {boo_k_time} on {date}"
-
-            stmt_p_exist = select(Patient).filter_by(phone=phone)
-            res_p_exist = await session.execute(stmt_p_exist)
-            phone_exist = res_p_exist.scalars().first()
-
-            if phone_exist and phone_exist.name != name:
-                return f"Phone number {phone} already exists for another patient"
 
             stmt_pat = select(Patient).filter_by(phone=phone)
             res_pat = await session.execute(stmt_pat)
@@ -391,52 +247,54 @@ async def book_appointment(name, age, gender, phone, doctor, date=None, boo_k_ti
             if patient:
                 stmt_existing = select(Appointment).filter_by(
                     patient_id=patient.id,
-                    doctor_id=doctor_id,
+                    doctor_id=doctor_obj.id,
                     date=book_date,
                     time=book_time
                 )
                 res_existing = await session.execute(stmt_existing)
-                if res_existing.scalars().first():
-                    return f"You already have an appointment with Dr. {doctor_name} on {date} at {boo_k_time}"
+                existing = res_existing.scalars().first()
+                if existing:
+                    return f"You have already booked an appointment with Dr. {doctor} on {date} at {boo_k_time}"
 
             if not patient:
-                patient = Patient(name=name, age=age, gender=gender, phone=phone)
+                patient = Patient(
+                    name=name,
+                    age=age,
+                    gender=gender,
+                    phone=phone
+                )
                 session.add(patient)
-                await session.flush()  # ✅ Use flush() to get patient.id without committing
-                # DON'T refresh here — flush is enough to populate patient.id
-
-            patient_id = patient.id  # ✅ Capture before commit
+                await session.commit()
+                await session.refresh(patient)
 
             new_apt = Appointment(
-                patient_id=patient_id,
-                doctor_id=doctor_id,
+                patient_id=patient.id,
+                doctor_id=doctor_obj.id,
                 date=book_date,
                 time=book_time,
                 reason=reason
             )
             session.add(new_apt)
-            await session.flush()  # ✅ flush to get new_apt.id
+            await session.commit()
+            await session.refresh(new_apt)
 
-            apt_id = new_apt.id  # ✅ Capture before commit
-
-            await session.commit()  # ✅ Now commit — no more ORM access after this
-
+            print("booking confirmed")
             return {
                 "status": "success",
                 "data": {
                     "name": name,
-                    "doctor": doctor_name,   # ✅ Already captured above
+                    "doctor": doctor_obj.name,
                     "date": date,
                     "time": boo_k_time,
                     "reason": reason,
-                    "appointment_id": apt_id,  # ✅ Already captured above
+                    "appointment_id": new_apt.id,
                 }
             }
-
         except Exception as e:
-            print(f"booking appoint err: {str(e)}")
+            print(f"booking appoint err: str{e}")
             await session.rollback()
             return f"Error {str(e)}"
+
 
 async def available_slots_fun(doctor: str, date: str):
     async with SessionLocal() as session:
@@ -974,8 +832,6 @@ async def run_pipeline(websocket: WebSocket):
 
     greeted = False
 
-    log_session_separator()
-
     transport = FastAPIWebsocketTransport(
         websocket=websocket,
         params=FastAPIWebsocketParams(
@@ -985,8 +841,6 @@ async def run_pipeline(websocket: WebSocket):
             audio_in_sample_rate=AUDIO_IN_SAMPLE_RATE,
             audio_out_sample_rate=AUDIO_OUT_SAMPLE_RATE,
             serializer=RawPCMSerializer(sample_rate=AUDIO_IN_SAMPLE_RATE),
-            # audio_in_filter=RNNoiseFilter(),
-
         ),
     )
 
@@ -998,13 +852,6 @@ async def run_pipeline(websocket: WebSocket):
             keyterm=[],
         ),
     )
-
-    # stt = DeepgramSTTService(
-    #     api_key="ac390c1a6291805ab580c7f4050c225e34deb7cb",
-    #     settings=DeepgramSTTService.Settings(
-    #         model="nova-3-general",
-    #     ),
-    # )
 
 
 
@@ -1155,6 +1002,7 @@ async def run_pipeline(websocket: WebSocket):
         - If age <= 15: Assign Dr. Ramya (Pediatrician).
         - If age > 15: Assign Dr. Shakthi (General Physician).
         If patient requests Dr. Shakthi but is <= 15, or has pediatric reason, suggest Dr. Ramya instead.
+        Use specialty keywords: cardiologist (heart), dermatologist (skin), pulmonologist (lung), neurologist (brain), general (fever, cold, body pain).
         3. Check Slots:
         Query `available_slots` for the assigned doctor and date. 
         Present 3 slots verbatim. If slots are open, say "all slots are open". If booked, suggest a different time.
@@ -1180,15 +1028,15 @@ async def run_pipeline(websocket: WebSocket):
 
 
 
-    # llm_gemini = GoogleLLMService(
-    #     api_key=os.getenv("GOOGLE_API_KEY", "AIzaSyD5-0t4hyRbPFaQrudY-cdahWQ-IbW8ilg"),
-    #     settings=GoogleLLMService.Settings(
-    #         model="gemini-2.5-flash-lite",
-    #         system_instruction=SYSTEM_INSTRUCTION,
-    #         temperature=0.7,
-    #         max_tokens=1024,
-    #     ),
-    # )
+    llm_gemini = GoogleLLMService(
+        api_key=os.getenv("GOOGLE_API_KEY", "AIzaSyD5-0t4hyRbPFaQrudY-cdahWQ-IbW8ilg"),
+        settings=GoogleLLMService.Settings(
+            model="gemini-2.5-flash-lite",
+            system_instruction=SYSTEM_INSTRUCTION,
+            temperature=0.7,
+            max_tokens=1024,
+        ),
+    )
 
     llm_mistral = MistralLLMService(
         api_key=os.getenv("MISTRAL_API_KEY", "sics84YZ5sbBCPmXQhnfmZzro3L7qOUm"),
@@ -1214,7 +1062,7 @@ async def run_pipeline(websocket: WebSocket):
     )
 
     llm_switcher = LLMSwitcher(
-        llms=[ llm_mistral, llm_openrouter],
+        llms=[llm_gemini, llm_mistral, llm_openrouter],
         strategy_type=ServiceSwitcherStrategyFailover,
     )
 
@@ -1327,31 +1175,31 @@ async def run_pipeline(websocket: WebSocket):
 
     tools =ToolsSchema(standard_tools=[book_appointment_schema, available_slots_schema, appointment_fetch_schema, fetch_upcoming_appointments_schema, update_appointment_schema, cancel_appointment_schema])
 
-    tts = CartesiaTTSService(
-        api_key=os.getenv("CARTESIA_API_KEY", "sk_car_GFSZXscziXzjJHEH3bBhzz"),
-        voice_id="79a125e8-cd45-4c13-8a67-188112f4dd22",
-        settings=CartesiaTTSService.Settings(
-            model="sonic-3.5",
-        ),
-    )
-
-
-    # tts = OpenAITTSService(
-    #     api_key="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",
-    #     settings=OpenAITTSService.Settings(
-    #         model="gpt-4o-mini-tts",
-    #         voice="nova", 
-    #         instructions=f"""
-    #         Voice Identity: Consistently maintain a low tone, friendly female voice throughout the entire conversation. Do not change gender, pitch profile, or vocal identity between responses.
-    #         Voice Style: low tone, soft, empathetic, and professional, reassuring the customer that their issue is understood and will be resolved.
-    #         Punctuation: Well-structured with natural pauses, allowing for clarity and a steady, calming flow.
-    #         Delivery: Calm and patient, with a supportive and understanding tone that reassures the listener.
-    #         Phrasing: Clear and concise, using customer-friendly language that avoids jargon while maintaining professionalism.
-    #         Tone: Empathetic and solution-focused, emphasizing both understanding and proactive assistance.
-    #         """ ,
-    #         speed=1.15,
+    # tts = CartesiaTTSService(
+    #     api_key=os.getenv("CARTESIA_API_KEY", "sk_car_GFSZXscziXzjJHEH3bBhzz"),
+    #     voice_id="79a125e8-cd45-4c13-8a67-188112f4dd22",
+    #     settings=CartesiaTTSService.Settings(
+    #         model="sonic-3.5",
     #     ),
     # )
+
+
+    tts = OpenAITTSService(
+        api_key="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",
+        settings=OpenAITTSService.Settings(
+            model="gpt-4o-mini-tts",
+            voice="nova", 
+            instructions=f"""
+            Voice Identity: Consistently maintain a warm, friendly female voice throughout the entire conversation. Do not change gender, pitch profile, or vocal identity between responses.
+            Voice Style: Warm, empathetic, and professional, reassuring the customer that their issue is understood and will be resolved.
+            Punctuation: Well-structured with natural pauses, allowing for clarity and a steady, calming flow.
+            Delivery: Calm and patient, with a supportive and understanding tone that reassures the listener.
+            Phrasing: Clear and concise, using customer-friendly language that avoids jargon while maintaining professionalism.
+            Tone: Empathetic and solution-focused, emphasizing both understanding and proactive assistance.
+            """ ,
+            speed=1.15,
+        ),
+    )
 
     context = LLMContext()
 
@@ -1363,16 +1211,11 @@ async def run_pipeline(websocket: WebSocket):
             vad_analyzer=SileroVADAnalyzer(
                 params=VADParams(
                     # start_secs=0.2,
-                    # stop_secs=0.2,
+                    stop_secs=0.2,
                     # min_volume=0.6,
-                    start_secs=0.3,
-                    stop_secs=0.2,  
-                    confidence=0.7,
-                    min_volume=0.6,
                     )
             ),
             user_mute_strategies=[MuteUntilFirstBotCompleteUserMuteStrategy()],
-            user_turn_stop_timeout=2.0,
         ),
     )
 

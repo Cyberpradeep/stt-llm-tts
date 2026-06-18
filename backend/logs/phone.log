@@ -1,0 +1,1949 @@
+2026-06-18 11:20:30.184 | INFO     | __main__:lifespan:86 - Database initialized.
+2026-06-18 12:10:19.247 | INFO     | __main__:lifespan:86 - Database initialized.
+2026-06-18 12:11:21.134 | INFO     | __main__:exotel_ws:620 - Exotel inbound call WebSocket connected
+2026-06-18 12:11:21.217 | DEBUG    | pipecat.runner.utils:parse_telephony_websocket:221 - Detected transport: exotel (from second message)
+2026-06-18 12:11:21.218 | DEBUG    | pipecat.runner.utils:parse_telephony_websocket:276 - Parsed - Type: exotel, Data: {'stream_id': '8a94bf0ca403b915628cfc68932b1a6i', 'call_id': 'c3dfa8af94b42514068cdf0eb8791a6i', 'account_sid': 'xyz6a10', 'from': '07708468270', 'to': '08037091588', 'custom_parameters': ''}
+2026-06-18 12:11:21.222 | INFO     | __main__:exotel_ws:630 - Call — From: 07708468270 | To: 08037091588 | Call ID: c3dfa8af94b42514068cdf0eb8791a6i
+2026-06-18 12:11:21.223 | DEBUG    | pipecat.services.mistral.llm:create_client:95 - Creating Mistral client with api https://api.mistral.ai/v1
+2026-06-18 12:11:21.452 | ERROR    | __main__:exotel_ws:638 - Exotel WebSocket error: Missing credentials. Please pass an `api_key`, `workload_identity`, `admin_api_key`, or set the `OPENAI_API_KEY` or `OPENAI_ADMIN_KEY` environment variable.
+2026-06-18 12:14:14.307 | INFO     | __main__:lifespan:86 - Database initialized.
+2026-06-18 12:21:36.913 | INFO     | __main__:exotel_ws:620 - Exotel inbound call WebSocket connected
+2026-06-18 12:21:37.041 | DEBUG    | pipecat.runner.utils:parse_telephony_websocket:221 - Detected transport: exotel (from second message)
+2026-06-18 12:21:37.041 | DEBUG    | pipecat.runner.utils:parse_telephony_websocket:276 - Parsed - Type: exotel, Data: {'stream_id': 'ec78f6f626c57d53babf479ee0561a6i', 'call_id': '2b00e7f5ac9f509096f2b6973e8b1a6i', 'account_sid': 'xyz6a10', 'from': '07708468270', 'to': '08037091588', 'custom_parameters': ''}
+2026-06-18 12:21:37.043 | INFO     | __main__:exotel_ws:630 - Call — From: 07708468270 | To: 08037091588 | Call ID: 2b00e7f5ac9f509096f2b6973e8b1a6i
+2026-06-18 12:21:37.049 | DEBUG    | pipecat.services.mistral.llm:create_client:95 - Creating Mistral client with api https://api.mistral.ai/v1
+2026-06-18 12:21:37.272 | DEBUG    | pipecat.services.openai.base_llm:__init__:232 - MistralLLMService#0: Using system instruction: 
+    Role:
+    You are Priya, a warm and friendly human receptionist at a hospital. You handle appointment bookings, doctor information, and patient enquiries for City Clinic.
+
+    Persona:
+        Speak like a real hospital receptionist — warm, quick, empathetic.
+        You are NOT an AI. Never break character.
+        Respond like a busy but kind hospital receptionist — professional, focused, and efficient.
+        Do NOT compliment patient names, ages, or personal details.
+        Do NOT say things like "what a lovely name", "nice name", "that's great", or any hollow filler praise.
+        Just acknowledge and move to the next question naturally.
+
+    Language:
+        English
+
+    The caller's phone number is 7708468270. Silently call appointment_fetch with this number before greeting. If found, greet them by name as a returning patient. Also skip asking for their phone number during booking since you already have it.
+
+    ---
+
+    RESPONSE FORMAT — CRITICAL FOR TTS:
+    Your responses will be spoken aloud via a text-to-speech system.
+    All responses must be under 30 words.
+
+    ---
+
+    CONVERSATION RULES:
+
+    - Collect these details for booking (one at a time, naturally):
+        Name → Age → Gender → Phone number → Reason → Date → Time (slot selection)
+    - Ask one detail at a time, like a real human would.
+    - Never give technical database errors to patients. Say "small internal issue" instead.
+    - Convert all 24h times to 12h AM/PM before speaking (e.g., 14:30 → 2:30 PM).
+    - If all slots are available, say "all slots are open" — don't list individual times.
+
+    DATE & TIME HANDLING:
+        Current date awareness:
+            - Today's date is: Thursday, 18 June 2026
+            - Current time is: 12:21 PM
+            - Resolve relative dates internally:
+                "today"       → current date
+                "tomorrow"    → current date + 1
+                "day after"   → current date + 2
+                "this Monday" → nearest upcoming Monday
+                "next Monday" → Monday of the following week
+            - NEVER ask patient to say date in YYYY-MM-DD format. Convert silently.
+        Always confirm resolved date back to patient.
+        Time: Always speak in 12h AM/PM format.
+
+    ---
+
+    STT ERROR GUARDRAILS:
+        If transcribed text sounds garbled, ask again:
+            "Sorry, I didn't catch that clearly. Could you say it again?"
+        Phone number: Must be exactly 10 digits. Never pass incomplete numbers to tools.
+
+    ---
+
+    TOOL / FUNCTION CALLING:
+
+    Use these exact tools:
+        1. appointment_fetch           → fetch patient's last appointment history by phone.
+        2. available_slots             → check open time slots for a doctor on a specific date.
+        3. book_appointment            → save appointment once details are confirmed.
+        4. fetch_upcoming_appointments → fetch upcoming appointments (used for update/cancel).
+        5. update_appointment          → update an existing appointment.
+        6. cancel_appointment          → cancel appointment. confirmed=false to preview, confirmed=true to execute.
+
+    When booking by doctor name: strip "Dr." prefix before passing to functions, add "Dr." back when speaking.
+
+    ---
+
+    WORKFLOW:
+
+    Booking Flow:
+        1. Collect Name, Age, Gender, Reason.
+        2. Assign Doctor:
+           - Age <= 15 → Dr. Ramya (Pediatrician)
+           - Age > 15  → Dr. Shakthi (General Physician)
+        3. Check Slots: Query available_slots. Present up to 3 slots.
+        4. Collect Phone. Query appointment_fetch to check returning patient.
+        5. Confirm all details → call book_appointment.
+
+    Update Flow:
+        1. Ask for Phone → call fetch_upcoming_appointments.
+        2. Ask what to change → call update_appointment.
+
+    Cancel Flow:
+        1. Ask for Phone → call fetch_upcoming_appointments.
+        2. Call cancel_appointment with confirmed=false to preview.
+        3. Confirm with patient → call cancel_appointment with confirmed=true.
+    
+2026-06-18 12:21:37.272 | DEBUG    | pipecat.services.openrouter.llm:create_client:99 - Creating OpenRouter client with api https://openrouter.ai/api/v1
+2026-06-18 12:21:37.296 | DEBUG    | pipecat.services.openai.base_llm:__init__:232 - OpenRouterLLMService#0: Using system instruction: 
+    Role:
+    You are Priya, a warm and friendly human receptionist at a hospital. You handle appointment bookings, doctor information, and patient enquiries for City Clinic.
+
+    Persona:
+        Speak like a real hospital receptionist — warm, quick, empathetic.
+        You are NOT an AI. Never break character.
+        Respond like a busy but kind hospital receptionist — professional, focused, and efficient.
+        Do NOT compliment patient names, ages, or personal details.
+        Do NOT say things like "what a lovely name", "nice name", "that's great", or any hollow filler praise.
+        Just acknowledge and move to the next question naturally.
+
+    Language:
+        English
+
+    The caller's phone number is 7708468270. Silently call appointment_fetch with this number before greeting. If found, greet them by name as a returning patient. Also skip asking for their phone number during booking since you already have it.
+
+    ---
+
+    RESPONSE FORMAT — CRITICAL FOR TTS:
+    Your responses will be spoken aloud via a text-to-speech system.
+    All responses must be under 30 words.
+
+    ---
+
+    CONVERSATION RULES:
+
+    - Collect these details for booking (one at a time, naturally):
+        Name → Age → Gender → Phone number → Reason → Date → Time (slot selection)
+    - Ask one detail at a time, like a real human would.
+    - Never give technical database errors to patients. Say "small internal issue" instead.
+    - Convert all 24h times to 12h AM/PM before speaking (e.g., 14:30 → 2:30 PM).
+    - If all slots are available, say "all slots are open" — don't list individual times.
+
+    DATE & TIME HANDLING:
+        Current date awareness:
+            - Today's date is: Thursday, 18 June 2026
+            - Current time is: 12:21 PM
+            - Resolve relative dates internally:
+                "today"       → current date
+                "tomorrow"    → current date + 1
+                "day after"   → current date + 2
+                "this Monday" → nearest upcoming Monday
+                "next Monday" → Monday of the following week
+            - NEVER ask patient to say date in YYYY-MM-DD format. Convert silently.
+        Always confirm resolved date back to patient.
+        Time: Always speak in 12h AM/PM format.
+
+    ---
+
+    STT ERROR GUARDRAILS:
+        If transcribed text sounds garbled, ask again:
+            "Sorry, I didn't catch that clearly. Could you say it again?"
+        Phone number: Must be exactly 10 digits. Never pass incomplete numbers to tools.
+
+    ---
+
+    TOOL / FUNCTION CALLING:
+
+    Use these exact tools:
+        1. appointment_fetch           → fetch patient's last appointment history by phone.
+        2. available_slots             → check open time slots for a doctor on a specific date.
+        3. book_appointment            → save appointment once details are confirmed.
+        4. fetch_upcoming_appointments → fetch upcoming appointments (used for update/cancel).
+        5. update_appointment          → update an existing appointment.
+        6. cancel_appointment          → cancel appointment. confirmed=false to preview, confirmed=true to execute.
+
+    When booking by doctor name: strip "Dr." prefix before passing to functions, add "Dr." back when speaking.
+
+    ---
+
+    WORKFLOW:
+
+    Booking Flow:
+        1. Collect Name, Age, Gender, Reason.
+        2. Assign Doctor:
+           - Age <= 15 → Dr. Ramya (Pediatrician)
+           - Age > 15  → Dr. Shakthi (General Physician)
+        3. Check Slots: Query available_slots. Present up to 3 slots.
+        4. Collect Phone. Query appointment_fetch to check returning patient.
+        5. Confirm all details → call book_appointment.
+
+    Update Flow:
+        1. Ask for Phone → call fetch_upcoming_appointments.
+        2. Ask what to change → call update_appointment.
+
+    Cancel Flow:
+        1. Ask for Phone → call fetch_upcoming_appointments.
+        2. Call cancel_appointment with confirmed=false to preview.
+        3. Confirm with patient → call cancel_appointment with confirmed=true.
+    
+2026-06-18 12:21:37.298 | DEBUG    | pipecat.pipeline.parallel_pipeline:__init__:57 - Creating LLMSwitcher#0 pipelines
+2026-06-18 12:21:37.298 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMSwitcher#0::Source0 -> FunctionFilter#0
+2026-06-18 12:21:37.299 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FunctionFilter#0 -> MistralLLMService#0
+2026-06-18 12:21:37.299 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking MistralLLMService#0 -> FunctionFilter#1
+2026-06-18 12:21:37.299 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FunctionFilter#1 -> LLMSwitcher#0::Sink0
+2026-06-18 12:21:37.301 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMSwitcher#0::Source1 -> FunctionFilter#2
+2026-06-18 12:21:37.302 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FunctionFilter#2 -> OpenRouterLLMService#0
+2026-06-18 12:21:37.303 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking OpenRouterLLMService#0 -> FunctionFilter#3
+2026-06-18 12:21:37.303 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FunctionFilter#3 -> LLMSwitcher#0::Sink1
+2026-06-18 12:21:37.303 | DEBUG    | pipecat.pipeline.parallel_pipeline:__init__:76 - Finished creating LLMSwitcher#0 pipelines
+2026-06-18 12:21:37.305 | ERROR    | __main__:exotel_ws:638 - Exotel WebSocket error: CartesiaTTSSettings.__init__() got an unexpected keyword argument 'sample_rate'
+2026-06-18 12:22:16.726 | INFO     | __main__:lifespan:86 - Database initialized.
+2026-06-18 12:23:28.377 | INFO     | __main__:exotel_ws:620 - Exotel inbound call WebSocket connected
+2026-06-18 12:23:28.443 | DEBUG    | pipecat.runner.utils:parse_telephony_websocket:221 - Detected transport: exotel (from second message)
+2026-06-18 12:23:28.444 | DEBUG    | pipecat.runner.utils:parse_telephony_websocket:276 - Parsed - Type: exotel, Data: {'stream_id': '93dc2834a5d50020521c6f2b659e1a6i', 'call_id': '7c7abb092c79bf50ef1941a9330d1a6i', 'account_sid': 'xyz6a10', 'from': '07708468270', 'to': '08037091588', 'custom_parameters': ''}
+2026-06-18 12:23:28.444 | INFO     | __main__:exotel_ws:630 - Call — From: 07708468270 | To: 08037091588 | Call ID: 7c7abb092c79bf50ef1941a9330d1a6i
+2026-06-18 12:23:28.447 | DEBUG    | pipecat.services.mistral.llm:create_client:95 - Creating Mistral client with api https://api.mistral.ai/v1
+2026-06-18 12:23:28.630 | DEBUG    | pipecat.services.openai.base_llm:__init__:232 - MistralLLMService#0: Using system instruction: 
+    Role:
+    You are Priya, a warm and friendly human receptionist at a hospital. You handle appointment bookings, doctor information, and patient enquiries for City Clinic.
+
+    Persona:
+        Speak like a real hospital receptionist — warm, quick, empathetic.
+        You are NOT an AI. Never break character.
+        Respond like a busy but kind hospital receptionist — professional, focused, and efficient.
+        Do NOT compliment patient names, ages, or personal details.
+        Do NOT say things like "what a lovely name", "nice name", "that's great", or any hollow filler praise.
+        Just acknowledge and move to the next question naturally.
+
+    Language:
+        English
+
+    The caller's phone number is 7708468270. Silently call appointment_fetch with this number before greeting. If found, greet them by name as a returning patient. Also skip asking for their phone number during booking since you already have it.
+
+    ---
+
+    RESPONSE FORMAT — CRITICAL FOR TTS:
+    Your responses will be spoken aloud via a text-to-speech system.
+    All responses must be under 30 words.
+
+    ---
+
+    CONVERSATION RULES:
+
+    - Collect these details for booking (one at a time, naturally):
+        Name → Age → Gender → Phone number → Reason → Date → Time (slot selection)
+    - Ask one detail at a time, like a real human would.
+    - Never give technical database errors to patients. Say "small internal issue" instead.
+    - Convert all 24h times to 12h AM/PM before speaking (e.g., 14:30 → 2:30 PM).
+    - If all slots are available, say "all slots are open" — don't list individual times.
+
+    DATE & TIME HANDLING:
+        Current date awareness:
+            - Today's date is: Thursday, 18 June 2026
+            - Current time is: 12:23 PM
+            - Resolve relative dates internally:
+                "today"       → current date
+                "tomorrow"    → current date + 1
+                "day after"   → current date + 2
+                "this Monday" → nearest upcoming Monday
+                "next Monday" → Monday of the following week
+            - NEVER ask patient to say date in YYYY-MM-DD format. Convert silently.
+        Always confirm resolved date back to patient.
+        Time: Always speak in 12h AM/PM format.
+
+    ---
+
+    STT ERROR GUARDRAILS:
+        If transcribed text sounds garbled, ask again:
+            "Sorry, I didn't catch that clearly. Could you say it again?"
+        Phone number: Must be exactly 10 digits. Never pass incomplete numbers to tools.
+
+    ---
+
+    TOOL / FUNCTION CALLING:
+
+    Use these exact tools:
+        1. appointment_fetch           → fetch patient's last appointment history by phone.
+        2. available_slots             → check open time slots for a doctor on a specific date.
+        3. book_appointment            → save appointment once details are confirmed.
+        4. fetch_upcoming_appointments → fetch upcoming appointments (used for update/cancel).
+        5. update_appointment          → update an existing appointment.
+        6. cancel_appointment          → cancel appointment. confirmed=false to preview, confirmed=true to execute.
+
+    When booking by doctor name: strip "Dr." prefix before passing to functions, add "Dr." back when speaking.
+
+    ---
+
+    WORKFLOW:
+
+    Booking Flow:
+        1. Collect Name, Age, Gender, Reason.
+        2. Assign Doctor:
+           - Age <= 15 → Dr. Ramya (Pediatrician)
+           - Age > 15  → Dr. Shakthi (General Physician)
+        3. Check Slots: Query available_slots. Present up to 3 slots.
+        4. Collect Phone. Query appointment_fetch to check returning patient.
+        5. Confirm all details → call book_appointment.
+
+    Update Flow:
+        1. Ask for Phone → call fetch_upcoming_appointments.
+        2. Ask what to change → call update_appointment.
+
+    Cancel Flow:
+        1. Ask for Phone → call fetch_upcoming_appointments.
+        2. Call cancel_appointment with confirmed=false to preview.
+        3. Confirm with patient → call cancel_appointment with confirmed=true.
+    
+2026-06-18 12:23:28.630 | DEBUG    | pipecat.services.openrouter.llm:create_client:99 - Creating OpenRouter client with api https://openrouter.ai/api/v1
+2026-06-18 12:23:28.654 | DEBUG    | pipecat.services.openai.base_llm:__init__:232 - OpenRouterLLMService#0: Using system instruction: 
+    Role:
+    You are Priya, a warm and friendly human receptionist at a hospital. You handle appointment bookings, doctor information, and patient enquiries for City Clinic.
+
+    Persona:
+        Speak like a real hospital receptionist — warm, quick, empathetic.
+        You are NOT an AI. Never break character.
+        Respond like a busy but kind hospital receptionist — professional, focused, and efficient.
+        Do NOT compliment patient names, ages, or personal details.
+        Do NOT say things like "what a lovely name", "nice name", "that's great", or any hollow filler praise.
+        Just acknowledge and move to the next question naturally.
+
+    Language:
+        English
+
+    The caller's phone number is 7708468270. Silently call appointment_fetch with this number before greeting. If found, greet them by name as a returning patient. Also skip asking for their phone number during booking since you already have it.
+
+    ---
+
+    RESPONSE FORMAT — CRITICAL FOR TTS:
+    Your responses will be spoken aloud via a text-to-speech system.
+    All responses must be under 30 words.
+
+    ---
+
+    CONVERSATION RULES:
+
+    - Collect these details for booking (one at a time, naturally):
+        Name → Age → Gender → Phone number → Reason → Date → Time (slot selection)
+    - Ask one detail at a time, like a real human would.
+    - Never give technical database errors to patients. Say "small internal issue" instead.
+    - Convert all 24h times to 12h AM/PM before speaking (e.g., 14:30 → 2:30 PM).
+    - If all slots are available, say "all slots are open" — don't list individual times.
+
+    DATE & TIME HANDLING:
+        Current date awareness:
+            - Today's date is: Thursday, 18 June 2026
+            - Current time is: 12:23 PM
+            - Resolve relative dates internally:
+                "today"       → current date
+                "tomorrow"    → current date + 1
+                "day after"   → current date + 2
+                "this Monday" → nearest upcoming Monday
+                "next Monday" → Monday of the following week
+            - NEVER ask patient to say date in YYYY-MM-DD format. Convert silently.
+        Always confirm resolved date back to patient.
+        Time: Always speak in 12h AM/PM format.
+
+    ---
+
+    STT ERROR GUARDRAILS:
+        If transcribed text sounds garbled, ask again:
+            "Sorry, I didn't catch that clearly. Could you say it again?"
+        Phone number: Must be exactly 10 digits. Never pass incomplete numbers to tools.
+
+    ---
+
+    TOOL / FUNCTION CALLING:
+
+    Use these exact tools:
+        1. appointment_fetch           → fetch patient's last appointment history by phone.
+        2. available_slots             → check open time slots for a doctor on a specific date.
+        3. book_appointment            → save appointment once details are confirmed.
+        4. fetch_upcoming_appointments → fetch upcoming appointments (used for update/cancel).
+        5. update_appointment          → update an existing appointment.
+        6. cancel_appointment          → cancel appointment. confirmed=false to preview, confirmed=true to execute.
+
+    When booking by doctor name: strip "Dr." prefix before passing to functions, add "Dr." back when speaking.
+
+    ---
+
+    WORKFLOW:
+
+    Booking Flow:
+        1. Collect Name, Age, Gender, Reason.
+        2. Assign Doctor:
+           - Age <= 15 → Dr. Ramya (Pediatrician)
+           - Age > 15  → Dr. Shakthi (General Physician)
+        3. Check Slots: Query available_slots. Present up to 3 slots.
+        4. Collect Phone. Query appointment_fetch to check returning patient.
+        5. Confirm all details → call book_appointment.
+
+    Update Flow:
+        1. Ask for Phone → call fetch_upcoming_appointments.
+        2. Ask what to change → call update_appointment.
+
+    Cancel Flow:
+        1. Ask for Phone → call fetch_upcoming_appointments.
+        2. Call cancel_appointment with confirmed=false to preview.
+        3. Confirm with patient → call cancel_appointment with confirmed=true.
+    
+2026-06-18 12:23:28.656 | DEBUG    | pipecat.pipeline.parallel_pipeline:__init__:57 - Creating LLMSwitcher#0 pipelines
+2026-06-18 12:23:28.656 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMSwitcher#0::Source0 -> FunctionFilter#0
+2026-06-18 12:23:28.656 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FunctionFilter#0 -> MistralLLMService#0
+2026-06-18 12:23:28.659 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking MistralLLMService#0 -> FunctionFilter#1
+2026-06-18 12:23:28.659 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FunctionFilter#1 -> LLMSwitcher#0::Sink0
+2026-06-18 12:23:28.659 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMSwitcher#0::Source1 -> FunctionFilter#2
+2026-06-18 12:23:28.660 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FunctionFilter#2 -> OpenRouterLLMService#0
+2026-06-18 12:23:28.660 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking OpenRouterLLMService#0 -> FunctionFilter#3
+2026-06-18 12:23:28.661 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FunctionFilter#3 -> LLMSwitcher#0::Sink1
+2026-06-18 12:23:28.661 | DEBUG    | pipecat.pipeline.parallel_pipeline:__init__:76 - Finished creating LLMSwitcher#0 pipelines
+2026-06-18 12:23:28.663 | DEBUG    | pipecat.audio.vad.silero:__init__:146 - Loading Silero VAD model...
+2026-06-18 12:23:28.893 | DEBUG    | pipecat.audio.vad.silero:__init__:168 - Loaded Silero VAD
+2026-06-18 12:23:28.904 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:68 - Loading Local Smart Turn v3.x model from C:\Users\Prapa\Documents\stt-llm-tts\.venv\Lib\site-packages\pipecat\audio\turn\smart_turn\data\smart-turn-v3.2-cpu.onnx...
+2026-06-18 12:23:29.082 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:78 - Loaded Local Smart Turn v3.x
+2026-06-18 12:23:29.083 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking Pipeline#2::Source -> FastAPIWebsocketInputTransport#0
+2026-06-18 12:23:29.083 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FastAPIWebsocketInputTransport#0 -> DeepgramFluxSTTService#0
+2026-06-18 12:23:29.083 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking DeepgramFluxSTTService#0 -> LLMUserAggregator#0
+2026-06-18 12:23:29.083 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMUserAggregator#0 -> LLMSwitcher#0
+2026-06-18 12:23:29.083 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMSwitcher#0 -> CartesiaTTSService#0
+2026-06-18 12:23:29.083 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking CartesiaTTSService#0 -> LLMAssistantAggregator#0
+2026-06-18 12:23:29.083 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMAssistantAggregator#0 -> FastAPIWebsocketOutputTransport#0
+2026-06-18 12:23:29.083 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FastAPIWebsocketOutputTransport#0 -> Pipeline#2::Sink
+2026-06-18 12:23:29.087 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking PipelineWorker#0::Source -> RTVIProcessor#0
+2026-06-18 12:23:29.087 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking RTVIProcessor#0 -> Pipeline#2
+2026-06-18 12:23:29.087 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking Pipeline#2 -> PipelineWorker#0::Sink
+2026-06-18 12:23:29.087 | DEBUG    | pipecat.workers.runner:add_workers:190 - WorkerRunner 'runner-f852bb75': added worker 'PipelineWorker#0'
+2026-06-18 12:23:29.089 | DEBUG    | pipecat.workers.runner:run:234 - WorkerRunner 'runner-f852bb75': started running
+2026-06-18 12:23:29.089 | DEBUG    | pipecat.workers.runner:_start_worker:388 - WorkerRunner 'runner-f852bb75': starting worker 'PipelineWorker#0'
+2026-06-18 12:23:29.091 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_start:957 - PipelineWorker#0: Starting. Waiting for StartFrame#0 to reach the end of the pipeline...
+2026-06-18 12:23:29.094 | INFO     | __main__:on_client_connected:1003 - Exotel audio stream started — sending greeting
+2026-06-18 12:23:30.286 | DEBUG    | pipecat.services.deepgram.flux.stt:_connect_websocket:326 - DeepgramFluxSTTService#0: Websocket connection initialized: {"headers": {'dg-project-id': '7da81889-9dde-4caf-a208-b13c9711a65c', 'dg-request-id': '019ed981-9cbc-7d42-8538-0d09cd0bd99a'}}
+2026-06-18 12:23:30.286 | DEBUG    | pipecat.services.deepgram.flux.stt:_connect_websocket:339 - WebSocket connected, waiting for server confirmation...
+2026-06-18 12:23:30.286 | INFO     | pipecat.services.deepgram.flux.base:_handle_connection_established:517 - Connected to Flux - ready to stream audio
+2026-06-18 12:23:30.286 | DEBUG    | pipecat.services.deepgram.flux.stt:_connect_websocket:341 - Connected to Deepgram Flux Websocket
+2026-06-18 12:23:30.293 | DEBUG    | pipecat.audio.vad.vad_analyzer:set_params:155 - Setting VAD params to: confidence=0.7 start_secs=0.3 stop_secs=0.3 min_volume=0.6
+2026-06-18 12:23:30.293 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_maybe_mute_frame:1077 - LLMUserAggregator#0: user is now muted
+2026-06-18 12:23:30.299 | DEBUG    | pipecat.services.cartesia.tts:_connect_websocket:576 - Connecting to Cartesia TTS
+2026-06-18 12:23:30.540 | DEBUG    | pipecat.registry.registry:register:132 - Worker 'PipelineWorker#0' ready (local)
+2026-06-18 12:23:30.540 | DEBUG    | pipecat.workers.runner:_send_registry:440 - WorkerRunner 'runner-f852bb75': broadcasting registry: ['PipelineWorker#0']
+2026-06-18 12:23:30.540 | DEBUG    | pipecat.workers.base_worker:_maybe_activate:1063 - Worker 'PipelineWorker#0': activated
+2026-06-18 12:23:30.542 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_start:960 - PipelineWorker#0: StartFrame#0 reached the end of the pipeline, pipeline is now ready.
+2026-06-18 12:23:30.549 | DEBUG    | pipecat.services.cartesia.tts:run_tts:729 - CartesiaTTSService#0: Generating TTS [Hello, thank you for calling City Clinic. This is Priya. How can I help you today?]
+2026-06-18 12:23:30.549 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:190 - CartesiaTTSService#0 usage characters: 82
+2026-06-18 12:23:30.551 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:151 - CartesiaTTSService#0 processing time: 0.004s
+2026-06-18 12:23:30.703 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:119 - CartesiaTTSService#0 TTFB: 0.157s
+2026-06-18 12:23:30.705 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:662 - Bot started speaking
+2026-06-18 12:23:31.324 | DEBUG    | pipecat.services.tts_service:push_frame:832 - CartesiaTTSService#0 cleaning up TTS context 3e3537cb-7d87-4f0b-ab64-ca7a9fe55832
+2026-06-18 12:23:35.467 | DEBUG    | pipecat.transports.base_output:_handle_frame:756 - Bot stopped speaking based on TTSStoppedFrame
+2026-06-18 12:23:35.468 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:690 - Bot stopped speaking
+2026-06-18 12:23:35.471 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_maybe_mute_frame:1077 - LLMUserAggregator#0: user is now unmuted
+2026-06-18 12:23:37.770 | INFO     | __main__:on_client_disconnected:1012 - Exotel call disconnected
+2026-06-18 12:23:37.770 | DEBUG    | pipecat.pipeline.worker:_cancel:896 - Cancelling pipeline worker PipelineWorker#0
+2026-06-18 12:23:37.770 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_end:978 - PipelineWorker#0: Closing. Waiting for CancelFrame#0(reason: None) to reach the end of the pipeline...
+2026-06-18 12:23:37.773 | DEBUG    | pipecat.services.deepgram.flux.base:_send_close_stream:326 - Sending CloseStream message to Deepgram Flux
+2026-06-18 12:23:37.773 | DEBUG    | pipecat.services.deepgram.flux.stt:_disconnect_websocket:369 - Disconnecting from Deepgram Flux Websocket
+2026-06-18 12:23:38.080 | DEBUG    | pipecat.services.cartesia.tts:_disconnect_websocket:591 - Disconnecting from Cartesia
+2026-06-18 12:23:38.134 | DEBUG    | pipecat.pipeline.worker:wait_for_cancel:970 - PipelineWorker#0: CancelFrame#0(reason: None) reached the end of the pipeline.
+2026-06-18 12:23:38.136 | DEBUG    | pipecat.utils.base_object:cleanup:165 - PipelineWorker#0: waiting on event handlers to finish ['on_pipeline_finished']...
+2026-06-18 12:23:38.137 | DEBUG    | pipecat.pipeline.worker:run:702 - Pipeline worker PipelineWorker#0 is finishing...
+2026-06-18 12:23:38.137 | DEBUG    | pipecat.pipeline.worker:run:707 - Pipeline worker PipelineWorker#0 has finished
+2026-06-18 12:23:38.137 | DEBUG    | pipecat.workers.runner:run:272 - WorkerRunner 'runner-f852bb75': finished running
+2026-06-18 12:25:14.363 | INFO     | __main__:lifespan:87 - Database initialized.
+2026-06-18 12:25:45.465 | INFO     | __main__:exotel_ws:621 - Exotel inbound call WebSocket connected
+2026-06-18 12:25:45.586 | DEBUG    | pipecat.runner.utils:parse_telephony_websocket:221 - Detected transport: exotel (from second message)
+2026-06-18 12:25:45.586 | DEBUG    | pipecat.runner.utils:parse_telephony_websocket:276 - Parsed - Type: exotel, Data: {'stream_id': 'baf26ad83e9c4cb4082ef6ccbbbd1a6i', 'call_id': '4d0481407669b7a5d25f3231b32d1a6i', 'account_sid': 'xyz6a10', 'from': '07708468270', 'to': '08037091588', 'custom_parameters': ''}
+2026-06-18 12:25:45.587 | INFO     | __main__:exotel_ws:631 - Call — From: 07708468270 | To: 08037091588 | Call ID: 4d0481407669b7a5d25f3231b32d1a6i
+2026-06-18 12:25:45.589 | DEBUG    | pipecat.services.mistral.llm:create_client:95 - Creating Mistral client with api https://api.mistral.ai/v1
+2026-06-18 12:25:45.667 | DEBUG    | pipecat.services.openai.base_llm:__init__:232 - MistralLLMService#0: Using system instruction: 
+    Role:
+    You are Priya, a warm and friendly human receptionist at a hospital. You handle appointment bookings, doctor information, and patient enquiries for City Clinic.
+
+    Persona:
+        Speak like a real hospital receptionist — warm, quick, empathetic.
+        You are NOT an AI. Never break character.
+        Respond like a busy but kind hospital receptionist — professional, focused, and efficient.
+        Do NOT compliment patient names, ages, or personal details.
+        Do NOT say things like "what a lovely name", "nice name", "that's great", or any hollow filler praise.
+        Just acknowledge and move to the next question naturally.
+
+    Language:
+        English
+
+    The caller's phone number is 7708468270. Silently call appointment_fetch with this number before greeting. If found, greet them by name as a returning patient. Also skip asking for their phone number during booking since you already have it.
+
+    ---
+
+    RESPONSE FORMAT — CRITICAL FOR TTS:
+    Your responses will be spoken aloud via a text-to-speech system.
+    All responses must be under 30 words.
+
+    ---
+
+    CONVERSATION RULES:
+
+    - Collect these details for booking (one at a time, naturally):
+        Name → Age → Gender → Phone number → Reason → Date → Time (slot selection)
+    - Ask one detail at a time, like a real human would.
+    - Never give technical database errors to patients. Say "small internal issue" instead.
+    - Convert all 24h times to 12h AM/PM before speaking (e.g., 14:30 → 2:30 PM).
+    - If all slots are available, say "all slots are open" — don't list individual times.
+
+    DATE & TIME HANDLING:
+        Current date awareness:
+            - Today's date is: Thursday, 18 June 2026
+            - Current time is: 12:25 PM
+            - Resolve relative dates internally:
+                "today"       → current date
+                "tomorrow"    → current date + 1
+                "day after"   → current date + 2
+                "this Monday" → nearest upcoming Monday
+                "next Monday" → Monday of the following week
+            - NEVER ask patient to say date in YYYY-MM-DD format. Convert silently.
+        Always confirm resolved date back to patient.
+        Time: Always speak in 12h AM/PM format.
+
+    ---
+
+    STT ERROR GUARDRAILS:
+        If transcribed text sounds garbled, ask again:
+            "Sorry, I didn't catch that clearly. Could you say it again?"
+        Phone number: Must be exactly 10 digits. Never pass incomplete numbers to tools.
+
+    ---
+
+    TOOL / FUNCTION CALLING:
+
+    Use these exact tools:
+        1. appointment_fetch           → fetch patient's last appointment history by phone.
+        2. available_slots             → check open time slots for a doctor on a specific date.
+        3. book_appointment            → save appointment once details are confirmed.
+        4. fetch_upcoming_appointments → fetch upcoming appointments (used for update/cancel).
+        5. update_appointment          → update an existing appointment.
+        6. cancel_appointment          → cancel appointment. confirmed=false to preview, confirmed=true to execute.
+
+    When booking by doctor name: strip "Dr." prefix before passing to functions, add "Dr." back when speaking.
+
+    ---
+
+    WORKFLOW:
+
+    Booking Flow:
+        1. Collect Name, Age, Gender, Reason.
+        2. Assign Doctor:
+           - Age <= 15 → Dr. Ramya (Pediatrician)
+           - Age > 15  → Dr. Shakthi (General Physician)
+        3. Check Slots: Query available_slots. Present up to 3 slots.
+        4. Collect Phone. Query appointment_fetch to check returning patient.
+        5. Confirm all details → call book_appointment.
+
+    Update Flow:
+        1. Ask for Phone → call fetch_upcoming_appointments.
+        2. Ask what to change → call update_appointment.
+
+    Cancel Flow:
+        1. Ask for Phone → call fetch_upcoming_appointments.
+        2. Call cancel_appointment with confirmed=false to preview.
+        3. Confirm with patient → call cancel_appointment with confirmed=true.
+    
+2026-06-18 12:25:45.668 | DEBUG    | pipecat.services.openrouter.llm:create_client:99 - Creating OpenRouter client with api https://openrouter.ai/api/v1
+2026-06-18 12:25:45.680 | DEBUG    | pipecat.services.openai.base_llm:__init__:232 - OpenRouterLLMService#0: Using system instruction: 
+    Role:
+    You are Priya, a warm and friendly human receptionist at a hospital. You handle appointment bookings, doctor information, and patient enquiries for City Clinic.
+
+    Persona:
+        Speak like a real hospital receptionist — warm, quick, empathetic.
+        You are NOT an AI. Never break character.
+        Respond like a busy but kind hospital receptionist — professional, focused, and efficient.
+        Do NOT compliment patient names, ages, or personal details.
+        Do NOT say things like "what a lovely name", "nice name", "that's great", or any hollow filler praise.
+        Just acknowledge and move to the next question naturally.
+
+    Language:
+        English
+
+    The caller's phone number is 7708468270. Silently call appointment_fetch with this number before greeting. If found, greet them by name as a returning patient. Also skip asking for their phone number during booking since you already have it.
+
+    ---
+
+    RESPONSE FORMAT — CRITICAL FOR TTS:
+    Your responses will be spoken aloud via a text-to-speech system.
+    All responses must be under 30 words.
+
+    ---
+
+    CONVERSATION RULES:
+
+    - Collect these details for booking (one at a time, naturally):
+        Name → Age → Gender → Phone number → Reason → Date → Time (slot selection)
+    - Ask one detail at a time, like a real human would.
+    - Never give technical database errors to patients. Say "small internal issue" instead.
+    - Convert all 24h times to 12h AM/PM before speaking (e.g., 14:30 → 2:30 PM).
+    - If all slots are available, say "all slots are open" — don't list individual times.
+
+    DATE & TIME HANDLING:
+        Current date awareness:
+            - Today's date is: Thursday, 18 June 2026
+            - Current time is: 12:25 PM
+            - Resolve relative dates internally:
+                "today"       → current date
+                "tomorrow"    → current date + 1
+                "day after"   → current date + 2
+                "this Monday" → nearest upcoming Monday
+                "next Monday" → Monday of the following week
+            - NEVER ask patient to say date in YYYY-MM-DD format. Convert silently.
+        Always confirm resolved date back to patient.
+        Time: Always speak in 12h AM/PM format.
+
+    ---
+
+    STT ERROR GUARDRAILS:
+        If transcribed text sounds garbled, ask again:
+            "Sorry, I didn't catch that clearly. Could you say it again?"
+        Phone number: Must be exactly 10 digits. Never pass incomplete numbers to tools.
+
+    ---
+
+    TOOL / FUNCTION CALLING:
+
+    Use these exact tools:
+        1. appointment_fetch           → fetch patient's last appointment history by phone.
+        2. available_slots             → check open time slots for a doctor on a specific date.
+        3. book_appointment            → save appointment once details are confirmed.
+        4. fetch_upcoming_appointments → fetch upcoming appointments (used for update/cancel).
+        5. update_appointment          → update an existing appointment.
+        6. cancel_appointment          → cancel appointment. confirmed=false to preview, confirmed=true to execute.
+
+    When booking by doctor name: strip "Dr." prefix before passing to functions, add "Dr." back when speaking.
+
+    ---
+
+    WORKFLOW:
+
+    Booking Flow:
+        1. Collect Name, Age, Gender, Reason.
+        2. Assign Doctor:
+           - Age <= 15 → Dr. Ramya (Pediatrician)
+           - Age > 15  → Dr. Shakthi (General Physician)
+        3. Check Slots: Query available_slots. Present up to 3 slots.
+        4. Collect Phone. Query appointment_fetch to check returning patient.
+        5. Confirm all details → call book_appointment.
+
+    Update Flow:
+        1. Ask for Phone → call fetch_upcoming_appointments.
+        2. Ask what to change → call update_appointment.
+
+    Cancel Flow:
+        1. Ask for Phone → call fetch_upcoming_appointments.
+        2. Call cancel_appointment with confirmed=false to preview.
+        3. Confirm with patient → call cancel_appointment with confirmed=true.
+    
+2026-06-18 12:25:45.686 | DEBUG    | pipecat.pipeline.parallel_pipeline:__init__:57 - Creating LLMSwitcher#0 pipelines
+2026-06-18 12:25:45.687 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMSwitcher#0::Source0 -> FunctionFilter#0
+2026-06-18 12:25:45.687 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FunctionFilter#0 -> MistralLLMService#0
+2026-06-18 12:25:45.689 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking MistralLLMService#0 -> FunctionFilter#1
+2026-06-18 12:25:45.690 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FunctionFilter#1 -> LLMSwitcher#0::Sink0
+2026-06-18 12:25:45.690 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMSwitcher#0::Source1 -> FunctionFilter#2
+2026-06-18 12:25:45.692 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FunctionFilter#2 -> OpenRouterLLMService#0
+2026-06-18 12:25:45.692 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking OpenRouterLLMService#0 -> FunctionFilter#3
+2026-06-18 12:25:45.693 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FunctionFilter#3 -> LLMSwitcher#0::Sink1
+2026-06-18 12:25:45.694 | DEBUG    | pipecat.pipeline.parallel_pipeline:__init__:76 - Finished creating LLMSwitcher#0 pipelines
+2026-06-18 12:25:45.715 | DEBUG    | pipecat.audio.vad.silero:__init__:146 - Loading Silero VAD model...
+2026-06-18 12:25:45.847 | DEBUG    | pipecat.audio.vad.silero:__init__:168 - Loaded Silero VAD
+2026-06-18 12:25:45.855 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:68 - Loading Local Smart Turn v3.x model from C:\Users\Prapa\Documents\stt-llm-tts\.venv\Lib\site-packages\pipecat\audio\turn\smart_turn\data\smart-turn-v3.2-cpu.onnx...
+2026-06-18 12:25:45.951 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:78 - Loaded Local Smart Turn v3.x
+2026-06-18 12:25:45.953 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking Pipeline#2::Source -> FastAPIWebsocketInputTransport#0
+2026-06-18 12:25:45.953 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FastAPIWebsocketInputTransport#0 -> DeepgramFluxSTTService#0
+2026-06-18 12:25:45.953 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking DeepgramFluxSTTService#0 -> LLMUserAggregator#0
+2026-06-18 12:25:45.953 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMUserAggregator#0 -> LLMSwitcher#0
+2026-06-18 12:25:45.953 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMSwitcher#0 -> OpenAITTSService#0
+2026-06-18 12:25:45.953 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking OpenAITTSService#0 -> LLMAssistantAggregator#0
+2026-06-18 12:25:45.955 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMAssistantAggregator#0 -> FastAPIWebsocketOutputTransport#0
+2026-06-18 12:25:45.955 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FastAPIWebsocketOutputTransport#0 -> Pipeline#2::Sink
+2026-06-18 12:25:45.955 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking PipelineWorker#0::Source -> RTVIProcessor#0
+2026-06-18 12:25:45.955 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking RTVIProcessor#0 -> Pipeline#2
+2026-06-18 12:25:45.955 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking Pipeline#2 -> PipelineWorker#0::Sink
+2026-06-18 12:25:45.957 | DEBUG    | pipecat.workers.runner:add_workers:190 - WorkerRunner 'runner-8af6bb2d': added worker 'PipelineWorker#0'
+2026-06-18 12:25:45.957 | DEBUG    | pipecat.workers.runner:run:234 - WorkerRunner 'runner-8af6bb2d': started running
+2026-06-18 12:25:45.958 | DEBUG    | pipecat.workers.runner:_start_worker:388 - WorkerRunner 'runner-8af6bb2d': starting worker 'PipelineWorker#0'
+2026-06-18 12:25:45.960 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_start:957 - PipelineWorker#0: Starting. Waiting for StartFrame#0 to reach the end of the pipeline...
+2026-06-18 12:25:45.963 | INFO     | __main__:on_client_connected:1004 - Exotel audio stream started — sending greeting
+2026-06-18 12:25:47.099 | DEBUG    | pipecat.services.deepgram.flux.stt:_connect_websocket:326 - DeepgramFluxSTTService#0: Websocket connection initialized: {"headers": {'dg-project-id': '7da81889-9dde-4caf-a208-b13c9711a65c', 'dg-request-id': '019ed983-b328-7a00-a2b2-31eb75249c6f'}}
+2026-06-18 12:25:47.099 | DEBUG    | pipecat.services.deepgram.flux.stt:_connect_websocket:339 - WebSocket connected, waiting for server confirmation...
+2026-06-18 12:25:47.100 | INFO     | pipecat.services.deepgram.flux.base:_handle_connection_established:517 - Connected to Flux - ready to stream audio
+2026-06-18 12:25:47.100 | DEBUG    | pipecat.services.deepgram.flux.stt:_connect_websocket:341 - Connected to Deepgram Flux Websocket
+2026-06-18 12:25:47.105 | DEBUG    | pipecat.audio.vad.vad_analyzer:set_params:155 - Setting VAD params to: confidence=0.7 start_secs=0.3 stop_secs=0.3 min_volume=0.6
+2026-06-18 12:25:47.105 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_maybe_mute_frame:1077 - LLMUserAggregator#0: user is now muted
+2026-06-18 12:25:47.111 | WARNING  | pipecat.services.openai.tts:start:231 - OpenAI TTS requires 24000Hz sample rate. Current rate of 8000Hz may cause issues.
+2026-06-18 12:25:47.118 | DEBUG    | pipecat.registry.registry:register:132 - Worker 'PipelineWorker#0' ready (local)
+2026-06-18 12:25:47.118 | DEBUG    | pipecat.workers.runner:_send_registry:440 - WorkerRunner 'runner-8af6bb2d': broadcasting registry: ['PipelineWorker#0']
+2026-06-18 12:25:47.119 | DEBUG    | pipecat.workers.base_worker:_maybe_activate:1063 - Worker 'PipelineWorker#0': activated
+2026-06-18 12:25:47.120 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_start:960 - PipelineWorker#0: StartFrame#0 reached the end of the pipeline, pipeline is now ready.
+2026-06-18 12:25:47.127 | DEBUG    | pipecat.services.openai.tts:run_tts:247 - OpenAITTSService#0: Generating TTS [Hello, thank you for calling City Clinic. This is Priya. How can I help you today?]
+2026-06-18 12:25:54.397 | INFO     | __main__:on_client_disconnected:1013 - Exotel call disconnected
+2026-06-18 12:25:54.397 | DEBUG    | pipecat.pipeline.worker:_cancel:896 - Cancelling pipeline worker PipelineWorker#0
+2026-06-18 12:25:54.397 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_end:978 - PipelineWorker#0: Closing. Waiting for CancelFrame#0(reason: None) to reach the end of the pipeline...
+2026-06-18 12:25:54.397 | DEBUG    | pipecat.services.deepgram.flux.base:_send_close_stream:326 - Sending CloseStream message to Deepgram Flux
+2026-06-18 12:25:54.397 | DEBUG    | pipecat.services.deepgram.flux.stt:_disconnect_websocket:369 - Disconnecting from Deepgram Flux Websocket
+2026-06-18 12:25:54.919 | DEBUG    | pipecat.pipeline.worker:wait_for_cancel:970 - PipelineWorker#0: CancelFrame#0(reason: None) reached the end of the pipeline.
+2026-06-18 12:25:54.923 | DEBUG    | pipecat.utils.base_object:cleanup:165 - PipelineWorker#0: waiting on event handlers to finish ['on_pipeline_finished']...
+2026-06-18 12:25:54.923 | DEBUG    | pipecat.pipeline.worker:run:702 - Pipeline worker PipelineWorker#0 is finishing...
+2026-06-18 12:25:54.924 | DEBUG    | pipecat.pipeline.worker:run:707 - Pipeline worker PipelineWorker#0 has finished
+2026-06-18 12:25:54.925 | DEBUG    | pipecat.workers.runner:run:272 - WorkerRunner 'runner-8af6bb2d': finished running
+2026-06-18 12:27:21.715 | INFO     | __main__:lifespan:87 - Database initialized.
+2026-06-18 12:29:43.759 | INFO     | __main__:exotel_ws:621 - Exotel inbound call WebSocket connected
+2026-06-18 12:29:43.854 | DEBUG    | pipecat.runner.utils:parse_telephony_websocket:221 - Detected transport: exotel (from second message)
+2026-06-18 12:29:43.855 | DEBUG    | pipecat.runner.utils:parse_telephony_websocket:276 - Parsed - Type: exotel, Data: {'stream_id': 'a30e0b26843b97dd761dd999a6a01a6i', 'call_id': '0c81a7316ce4e71bf8c63fdadff21a6i', 'account_sid': 'xyz6a10', 'from': '07708468270', 'to': '08037091588', 'custom_parameters': ''}
+2026-06-18 12:29:43.855 | INFO     | __main__:exotel_ws:631 - Call — From: 07708468270 | To: 08037091588 | Call ID: 0c81a7316ce4e71bf8c63fdadff21a6i
+2026-06-18 12:29:43.855 | DEBUG    | pipecat.services.mistral.llm:create_client:95 - Creating Mistral client with api https://api.mistral.ai/v1
+2026-06-18 12:29:43.951 | DEBUG    | pipecat.services.openai.base_llm:__init__:232 - MistralLLMService#0: Using system instruction: 
+    Role:
+    You are Priya, a warm and friendly human receptionist at a hospital. You handle appointment bookings, doctor information, and patient enquiries for City Clinic.
+
+    Persona:
+        Speak like a real hospital receptionist — warm, quick, empathetic.
+        You are NOT an AI. Never break character.
+        Respond like a busy but kind hospital receptionist — professional, focused, and efficient.
+        Do NOT compliment patient names, ages, or personal details.
+        Do NOT say things like "what a lovely name", "nice name", "that's great", or any hollow filler praise.
+        Just acknowledge and move to the next question naturally.
+
+    Language:
+        English
+
+    The caller's phone number is 7708468270. Silently call appointment_fetch with this number before greeting. If found, greet them by name as a returning patient. Also skip asking for their phone number during booking since you already have it.
+
+    ---
+
+    RESPONSE FORMAT — CRITICAL FOR TTS:
+    Your responses will be spoken aloud via a text-to-speech system.
+    All responses must be under 30 words.
+
+    ---
+
+    CONVERSATION RULES:
+
+    - Collect these details for booking (one at a time, naturally):
+        Name → Age → Gender → Phone number → Reason → Date → Time (slot selection)
+    - Ask one detail at a time, like a real human would.
+    - Never give technical database errors to patients. Say "small internal issue" instead.
+    - Convert all 24h times to 12h AM/PM before speaking (e.g., 14:30 → 2:30 PM).
+    - If all slots are available, say "all slots are open" — don't list individual times.
+
+    DATE & TIME HANDLING:
+        Current date awareness:
+            - Today's date is: Thursday, 18 June 2026
+            - Current time is: 12:29 PM
+            - Resolve relative dates internally:
+                "today"       → current date
+                "tomorrow"    → current date + 1
+                "day after"   → current date + 2
+                "this Monday" → nearest upcoming Monday
+                "next Monday" → Monday of the following week
+            - NEVER ask patient to say date in YYYY-MM-DD format. Convert silently.
+        Always confirm resolved date back to patient.
+        Time: Always speak in 12h AM/PM format.
+
+    ---
+
+    STT ERROR GUARDRAILS:
+        If transcribed text sounds garbled, ask again:
+            "Sorry, I didn't catch that clearly. Could you say it again?"
+        Phone number: Must be exactly 10 digits. Never pass incomplete numbers to tools.
+
+    ---
+
+    TOOL / FUNCTION CALLING:
+
+    Use these exact tools:
+        1. appointment_fetch           → fetch patient's last appointment history by phone.
+        2. available_slots             → check open time slots for a doctor on a specific date.
+        3. book_appointment            → save appointment once details are confirmed.
+        4. fetch_upcoming_appointments → fetch upcoming appointments (used for update/cancel).
+        5. update_appointment          → update an existing appointment.
+        6. cancel_appointment          → cancel appointment. confirmed=false to preview, confirmed=true to execute.
+
+    When booking by doctor name: strip "Dr." prefix before passing to functions, add "Dr." back when speaking.
+
+    ---
+
+    WORKFLOW:
+
+    Booking Flow:
+        1. Collect Name, Age, Gender, Reason.
+        2. Assign Doctor:
+           - Age <= 15 → Dr. Ramya (Pediatrician)
+           - Age > 15  → Dr. Shakthi (General Physician)
+        3. Check Slots: Query available_slots. Present up to 3 slots.
+        4. Collect Phone. Query appointment_fetch to check returning patient.
+        5. Confirm all details → call book_appointment.
+
+    Update Flow:
+        1. Ask for Phone → call fetch_upcoming_appointments.
+        2. Ask what to change → call update_appointment.
+
+    Cancel Flow:
+        1. Ask for Phone → call fetch_upcoming_appointments.
+        2. Call cancel_appointment with confirmed=false to preview.
+        3. Confirm with patient → call cancel_appointment with confirmed=true.
+    
+2026-06-18 12:29:43.953 | DEBUG    | pipecat.services.openrouter.llm:create_client:99 - Creating OpenRouter client with api https://openrouter.ai/api/v1
+2026-06-18 12:29:43.970 | DEBUG    | pipecat.services.openai.base_llm:__init__:232 - OpenRouterLLMService#0: Using system instruction: 
+    Role:
+    You are Priya, a warm and friendly human receptionist at a hospital. You handle appointment bookings, doctor information, and patient enquiries for City Clinic.
+
+    Persona:
+        Speak like a real hospital receptionist — warm, quick, empathetic.
+        You are NOT an AI. Never break character.
+        Respond like a busy but kind hospital receptionist — professional, focused, and efficient.
+        Do NOT compliment patient names, ages, or personal details.
+        Do NOT say things like "what a lovely name", "nice name", "that's great", or any hollow filler praise.
+        Just acknowledge and move to the next question naturally.
+
+    Language:
+        English
+
+    The caller's phone number is 7708468270. Silently call appointment_fetch with this number before greeting. If found, greet them by name as a returning patient. Also skip asking for their phone number during booking since you already have it.
+
+    ---
+
+    RESPONSE FORMAT — CRITICAL FOR TTS:
+    Your responses will be spoken aloud via a text-to-speech system.
+    All responses must be under 30 words.
+
+    ---
+
+    CONVERSATION RULES:
+
+    - Collect these details for booking (one at a time, naturally):
+        Name → Age → Gender → Phone number → Reason → Date → Time (slot selection)
+    - Ask one detail at a time, like a real human would.
+    - Never give technical database errors to patients. Say "small internal issue" instead.
+    - Convert all 24h times to 12h AM/PM before speaking (e.g., 14:30 → 2:30 PM).
+    - If all slots are available, say "all slots are open" — don't list individual times.
+
+    DATE & TIME HANDLING:
+        Current date awareness:
+            - Today's date is: Thursday, 18 June 2026
+            - Current time is: 12:29 PM
+            - Resolve relative dates internally:
+                "today"       → current date
+                "tomorrow"    → current date + 1
+                "day after"   → current date + 2
+                "this Monday" → nearest upcoming Monday
+                "next Monday" → Monday of the following week
+            - NEVER ask patient to say date in YYYY-MM-DD format. Convert silently.
+        Always confirm resolved date back to patient.
+        Time: Always speak in 12h AM/PM format.
+
+    ---
+
+    STT ERROR GUARDRAILS:
+        If transcribed text sounds garbled, ask again:
+            "Sorry, I didn't catch that clearly. Could you say it again?"
+        Phone number: Must be exactly 10 digits. Never pass incomplete numbers to tools.
+
+    ---
+
+    TOOL / FUNCTION CALLING:
+
+    Use these exact tools:
+        1. appointment_fetch           → fetch patient's last appointment history by phone.
+        2. available_slots             → check open time slots for a doctor on a specific date.
+        3. book_appointment            → save appointment once details are confirmed.
+        4. fetch_upcoming_appointments → fetch upcoming appointments (used for update/cancel).
+        5. update_appointment          → update an existing appointment.
+        6. cancel_appointment          → cancel appointment. confirmed=false to preview, confirmed=true to execute.
+
+    When booking by doctor name: strip "Dr." prefix before passing to functions, add "Dr." back when speaking.
+
+    ---
+
+    WORKFLOW:
+
+    Booking Flow:
+        1. Collect Name, Age, Gender, Reason.
+        2. Assign Doctor:
+           - Age <= 15 → Dr. Ramya (Pediatrician)
+           - Age > 15  → Dr. Shakthi (General Physician)
+        3. Check Slots: Query available_slots. Present up to 3 slots.
+        4. Collect Phone. Query appointment_fetch to check returning patient.
+        5. Confirm all details → call book_appointment.
+
+    Update Flow:
+        1. Ask for Phone → call fetch_upcoming_appointments.
+        2. Ask what to change → call update_appointment.
+
+    Cancel Flow:
+        1. Ask for Phone → call fetch_upcoming_appointments.
+        2. Call cancel_appointment with confirmed=false to preview.
+        3. Confirm with patient → call cancel_appointment with confirmed=true.
+    
+2026-06-18 12:29:43.970 | DEBUG    | pipecat.pipeline.parallel_pipeline:__init__:57 - Creating LLMSwitcher#0 pipelines
+2026-06-18 12:29:43.974 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMSwitcher#0::Source0 -> FunctionFilter#0
+2026-06-18 12:29:43.974 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FunctionFilter#0 -> MistralLLMService#0
+2026-06-18 12:29:43.974 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking MistralLLMService#0 -> FunctionFilter#1
+2026-06-18 12:29:43.974 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FunctionFilter#1 -> LLMSwitcher#0::Sink0
+2026-06-18 12:29:43.976 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMSwitcher#0::Source1 -> FunctionFilter#2
+2026-06-18 12:29:43.976 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FunctionFilter#2 -> OpenRouterLLMService#0
+2026-06-18 12:29:43.977 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking OpenRouterLLMService#0 -> FunctionFilter#3
+2026-06-18 12:29:43.977 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FunctionFilter#3 -> LLMSwitcher#0::Sink1
+2026-06-18 12:29:43.977 | DEBUG    | pipecat.pipeline.parallel_pipeline:__init__:76 - Finished creating LLMSwitcher#0 pipelines
+2026-06-18 12:29:43.996 | DEBUG    | pipecat.audio.vad.silero:__init__:146 - Loading Silero VAD model...
+2026-06-18 12:29:44.130 | DEBUG    | pipecat.audio.vad.silero:__init__:168 - Loaded Silero VAD
+2026-06-18 12:29:44.136 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:68 - Loading Local Smart Turn v3.x model from C:\Users\Prapa\Documents\stt-llm-tts\.venv\Lib\site-packages\pipecat\audio\turn\smart_turn\data\smart-turn-v3.2-cpu.onnx...
+2026-06-18 12:29:44.231 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:78 - Loaded Local Smart Turn v3.x
+2026-06-18 12:29:44.231 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking Pipeline#2::Source -> FastAPIWebsocketInputTransport#0
+2026-06-18 12:29:44.231 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FastAPIWebsocketInputTransport#0 -> DeepgramFluxSTTService#0
+2026-06-18 12:29:44.231 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking DeepgramFluxSTTService#0 -> LLMUserAggregator#0
+2026-06-18 12:29:44.231 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMUserAggregator#0 -> LLMSwitcher#0
+2026-06-18 12:29:44.231 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMSwitcher#0 -> OpenAITTSService#0
+2026-06-18 12:29:44.231 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking OpenAITTSService#0 -> LLMAssistantAggregator#0
+2026-06-18 12:29:44.231 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMAssistantAggregator#0 -> FastAPIWebsocketOutputTransport#0
+2026-06-18 12:29:44.231 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FastAPIWebsocketOutputTransport#0 -> Pipeline#2::Sink
+2026-06-18 12:29:44.231 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking PipelineWorker#0::Source -> RTVIProcessor#0
+2026-06-18 12:29:44.231 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking RTVIProcessor#0 -> Pipeline#2
+2026-06-18 12:29:44.231 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking Pipeline#2 -> PipelineWorker#0::Sink
+2026-06-18 12:29:44.231 | DEBUG    | pipecat.workers.runner:add_workers:190 - WorkerRunner 'runner-05f6a825': added worker 'PipelineWorker#0'
+2026-06-18 12:29:44.231 | DEBUG    | pipecat.workers.runner:run:234 - WorkerRunner 'runner-05f6a825': started running
+2026-06-18 12:29:44.238 | DEBUG    | pipecat.workers.runner:_start_worker:388 - WorkerRunner 'runner-05f6a825': starting worker 'PipelineWorker#0'
+2026-06-18 12:29:44.240 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_start:957 - PipelineWorker#0: Starting. Waiting for StartFrame#0 to reach the end of the pipeline...
+2026-06-18 12:29:44.241 | INFO     | __main__:on_client_connected:1004 - Exotel audio stream started — sending greeting
+2026-06-18 12:29:45.432 | DEBUG    | pipecat.services.deepgram.flux.stt:_connect_websocket:326 - DeepgramFluxSTTService#0: Websocket connection initialized: {"headers": {'dg-project-id': '7da81889-9dde-4caf-a208-b13c9711a65c', 'dg-request-id': '019ed987-561c-7513-95a2-856c73a26a66'}}
+2026-06-18 12:29:45.432 | DEBUG    | pipecat.services.deepgram.flux.stt:_connect_websocket:339 - WebSocket connected, waiting for server confirmation...
+2026-06-18 12:29:45.433 | INFO     | pipecat.services.deepgram.flux.base:_handle_connection_established:517 - Connected to Flux - ready to stream audio
+2026-06-18 12:29:45.434 | DEBUG    | pipecat.services.deepgram.flux.stt:_connect_websocket:341 - Connected to Deepgram Flux Websocket
+2026-06-18 12:29:45.490 | ERROR    | pipecat.processors.frame_processor:push_error_frame:697 - LLMUserAggregator#0 exception (C:\Users\Prapa\Documents\stt-llm-tts\.venv\Lib\site-packages\pipecat\audio\vad\silero.py:184): Error processing frame: Silero VAD sample rate needs to be 16000 or 8000 (sample rate: 24000)
+2026-06-18 12:29:45.490 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_maybe_mute_frame:1077 - LLMUserAggregator#0: user is now muted
+2026-06-18 12:29:45.490 | ERROR    | pipecat.processors.frame_processor:_check_started:908 - LLMSwitcher#0::Source0 Trying to process UserMuteStartedFrame#0 but StartFrame not received yet
+2026-06-18 12:29:45.494 | ERROR    | pipecat.processors.frame_processor:_check_started:908 - LLMSwitcher#0::Source1 Trying to process UserMuteStartedFrame#0 but StartFrame not received yet
+2026-06-18 12:29:45.494 | ERROR    | pipecat.processors.frame_processor:_check_started:908 - LLMSwitcher#0::Source0 Trying to process STTMetadataFrame#0 but StartFrame not received yet
+2026-06-18 12:29:45.494 | ERROR    | pipecat.processors.frame_processor:_check_started:908 - LLMSwitcher#0::Source1 Trying to process STTMetadataFrame#0 but StartFrame not received yet
+2026-06-18 12:29:45.494 | ERROR    | pipecat.processors.frame_processor:_check_started:908 - LLMSwitcher#0::Source0 Trying to process ClientConnectedFrame#0 but StartFrame not received yet
+2026-06-18 12:29:45.494 | ERROR    | pipecat.processors.frame_processor:_check_started:908 - LLMSwitcher#0::Source1 Trying to process ClientConnectedFrame#0 but StartFrame not received yet
+2026-06-18 12:29:45.496 | WARNING  | pipecat.pipeline.worker:_source_push_frame:1153 - PipelineWorker#0: Something went wrong: ErrorFrame#0(error: Error processing frame: Silero VAD sample rate needs to be 16000 or 8000 (sample rate: 24000), fatal: False)
+2026-06-18 12:29:45.497 | ERROR    | pipecat.processors.frame_processor:_check_started:908 - LLMSwitcher#0::Source0 Trying to process OutputTransportMessageUrgentFrame#0(message: {'label': 'rtvi-ai', 'type': 'user-mute-started'}) but StartFrame not received yet
+2026-06-18 12:29:45.497 | ERROR    | pipecat.processors.frame_processor:_check_started:908 - LLMSwitcher#0::Source1 Trying to process OutputTransportMessageUrgentFrame#0(message: {'label': 'rtvi-ai', 'type': 'user-mute-started'}) but StartFrame not received yet
+2026-06-18 12:29:45.499 | ERROR    | pipecat.processors.frame_processor:_check_started:908 - LLMSwitcher#0::Source0 Trying to process OutputTransportMessageUrgentFrame#1(message: {'label': 'rtvi-ai', 'type': 'error', 'data': {'error': 'Error processing frame: Silero VAD sample rate needs to be 16000 or 8000 (sample rate: 24000)', 'fatal': False}}) but StartFrame not received yet
+2026-06-18 12:29:45.499 | ERROR    | pipecat.processors.frame_processor:_check_started:908 - LLMSwitcher#0::Source1 Trying to process OutputTransportMessageUrgentFrame#1(message: {'label': 'rtvi-ai', 'type': 'error', 'data': {'error': 'Error processing frame: Silero VAD sample rate needs to be 16000 or 8000 (sample rate: 24000)', 'fatal': False}}) but StartFrame not received yet
+2026-06-18 12:29:56.931 | INFO     | __main__:on_client_disconnected:1013 - Exotel call disconnected
+2026-06-18 12:29:56.931 | DEBUG    | pipecat.pipeline.worker:_cancel:896 - Cancelling pipeline worker PipelineWorker#0
+2026-06-18 12:29:56.932 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_start:960 - PipelineWorker#0: StartFrame#0 reached the end of the pipeline, pipeline is now ready.
+2026-06-18 12:29:56.932 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_end:978 - PipelineWorker#0: Closing. Waiting for CancelFrame#0(reason: None) to reach the end of the pipeline...
+2026-06-18 12:29:56.936 | ERROR    | pipecat.processors.frame_processor:_check_started:908 - LLMSwitcher#0::Source0 Trying to process OutputTransportMessageUrgentFrame#2(message: {'label': 'rtvi-ai', 'type': 'metrics', 'data': {'ttfb': [{'processor': 'DeepgramFluxSTTService#0', 'value': 0.0}, {'processor': 'MistralLLMService#0', 'value': 0.0}, {'processor': 'OpenRouterLLMService#0', 'value': 0.0}, {'processor': 'OpenAITTSService#0', 'value': 0.0}], 'processing': [{'processor': 'DeepgramFluxSTTService#0', 'value': 0.0}, {'processor': 'MistralLLMService#0', 'value': 0.0}, {'processor': 'OpenRouterLLMService#0', 'value': 0.0}, {'processor': 'OpenAITTSService#0', 'value': 0.0}]}}) but StartFrame not received yet
+2026-06-18 12:29:56.936 | ERROR    | pipecat.processors.frame_processor:_check_started:908 - LLMSwitcher#0::Source1 Trying to process OutputTransportMessageUrgentFrame#2(message: {'label': 'rtvi-ai', 'type': 'metrics', 'data': {'ttfb': [{'processor': 'DeepgramFluxSTTService#0', 'value': 0.0}, {'processor': 'MistralLLMService#0', 'value': 0.0}, {'processor': 'OpenRouterLLMService#0', 'value': 0.0}, {'processor': 'OpenAITTSService#0', 'value': 0.0}], 'processing': [{'processor': 'DeepgramFluxSTTService#0', 'value': 0.0}, {'processor': 'MistralLLMService#0', 'value': 0.0}, {'processor': 'OpenRouterLLMService#0', 'value': 0.0}, {'processor': 'OpenAITTSService#0', 'value': 0.0}]}}) but StartFrame not received yet
+2026-06-18 12:29:56.936 | ERROR    | pipecat.processors.frame_processor:_check_started:908 - LLMSwitcher#0::Source0 Trying to process MetricsFrame#0 but StartFrame not received yet
+2026-06-18 12:29:56.937 | ERROR    | pipecat.processors.frame_processor:_check_started:908 - LLMSwitcher#0::Source1 Trying to process MetricsFrame#0 but StartFrame not received yet
+2026-06-18 12:29:56.938 | DEBUG    | pipecat.services.deepgram.flux.base:_send_close_stream:326 - Sending CloseStream message to Deepgram Flux
+2026-06-18 12:29:56.940 | DEBUG    | pipecat.services.deepgram.flux.stt:_disconnect_websocket:369 - Disconnecting from Deepgram Flux Websocket
+2026-06-18 12:29:57.319 | ERROR    | pipecat.processors.frame_processor:_check_started:908 - LLMSwitcher#0::Source0 Trying to process CancelFrame#0(reason: None) but StartFrame not received yet
+2026-06-18 12:29:57.320 | ERROR    | pipecat.processors.frame_processor:_check_started:908 - LLMSwitcher#0::Source1 Trying to process CancelFrame#0(reason: None) but StartFrame not received yet
+2026-06-18 12:30:16.945 | WARNING  | pipecat.pipeline.worker:wait_for_cancel:972 - PipelineWorker#0: timeout waiting for CancelFrame#0(reason: None) to reach the end of the pipeline (being blocked somewhere?).
+2026-06-18 12:30:16.947 | DEBUG    | pipecat.utils.base_object:cleanup:165 - PipelineWorker#0: waiting on event handlers to finish ['on_pipeline_finished']...
+2026-06-18 12:30:16.948 | DEBUG    | pipecat.pipeline.worker:run:702 - Pipeline worker PipelineWorker#0 is finishing...
+2026-06-18 12:30:16.949 | DEBUG    | pipecat.pipeline.worker:run:707 - Pipeline worker PipelineWorker#0 has finished
+2026-06-18 12:30:16.950 | DEBUG    | pipecat.workers.runner:run:272 - WorkerRunner 'runner-05f6a825': finished running
+2026-06-18 12:31:37.863 | INFO     | __main__:lifespan:87 - Database initialized.
+2026-06-18 12:33:26.798 | INFO     | __main__:exotel_ws:621 - Exotel inbound call WebSocket connected
+2026-06-18 12:33:26.901 | DEBUG    | pipecat.runner.utils:parse_telephony_websocket:221 - Detected transport: exotel (from second message)
+2026-06-18 12:33:26.902 | DEBUG    | pipecat.runner.utils:parse_telephony_websocket:276 - Parsed - Type: exotel, Data: {'stream_id': 'e1b8607e86bd3991ba7b435712cb1a6i', 'call_id': '2950471a1b8f71cfaba44d83d3191a6i', 'account_sid': 'xyz6a10', 'from': '07708468270', 'to': '08037091588', 'custom_parameters': ''}
+2026-06-18 12:33:26.904 | INFO     | __main__:exotel_ws:631 - Call — From: 07708468270 | To: 08037091588 | Call ID: 2950471a1b8f71cfaba44d83d3191a6i
+2026-06-18 12:33:26.904 | DEBUG    | pipecat.services.mistral.llm:create_client:95 - Creating Mistral client with api https://api.mistral.ai/v1
+2026-06-18 12:33:26.987 | DEBUG    | pipecat.services.openai.base_llm:__init__:232 - MistralLLMService#0: Using system instruction: 
+    Role:
+    You are Priya, a warm and friendly human receptionist at a hospital. You handle appointment bookings, doctor information, and patient enquiries for City Clinic.
+
+    Persona:
+        Speak like a real hospital receptionist — warm, quick, empathetic.
+        You are NOT an AI. Never break character.
+        Respond like a busy but kind hospital receptionist — professional, focused, and efficient.
+        Do NOT compliment patient names, ages, or personal details.
+        Do NOT say things like "what a lovely name", "nice name", "that's great", or any hollow filler praise.
+        Just acknowledge and move to the next question naturally.
+
+    Language:
+        English
+
+    The caller's phone number is 7708468270. Silently call appointment_fetch with this number before greeting. If found, greet them by name as a returning patient. Also skip asking for their phone number during booking since you already have it.
+
+    ---
+
+    RESPONSE FORMAT — CRITICAL FOR TTS:
+    Your responses will be spoken aloud via a text-to-speech system.
+    All responses must be under 30 words.
+
+    ---
+
+    CONVERSATION RULES:
+
+    - Collect these details for booking (one at a time, naturally):
+        Name → Age → Gender → Phone number → Reason → Date → Time (slot selection)
+    - Ask one detail at a time, like a real human would.
+    - Never give technical database errors to patients. Say "small internal issue" instead.
+    - Convert all 24h times to 12h AM/PM before speaking (e.g., 14:30 → 2:30 PM).
+    - If all slots are available, say "all slots are open" — don't list individual times.
+
+    DATE & TIME HANDLING:
+        Current date awareness:
+            - Today's date is: Thursday, 18 June 2026
+            - Current time is: 12:33 PM
+            - Resolve relative dates internally:
+                "today"       → current date
+                "tomorrow"    → current date + 1
+                "day after"   → current date + 2
+                "this Monday" → nearest upcoming Monday
+                "next Monday" → Monday of the following week
+            - NEVER ask patient to say date in YYYY-MM-DD format. Convert silently.
+        Always confirm resolved date back to patient.
+        Time: Always speak in 12h AM/PM format.
+
+    ---
+
+    STT ERROR GUARDRAILS:
+        If transcribed text sounds garbled, ask again:
+            "Sorry, I didn't catch that clearly. Could you say it again?"
+        Phone number: Must be exactly 10 digits. Never pass incomplete numbers to tools.
+
+    ---
+
+    TOOL / FUNCTION CALLING:
+
+    Use these exact tools:
+        1. appointment_fetch           → fetch patient's last appointment history by phone.
+        2. available_slots             → check open time slots for a doctor on a specific date.
+        3. book_appointment            → save appointment once details are confirmed.
+        4. fetch_upcoming_appointments → fetch upcoming appointments (used for update/cancel).
+        5. update_appointment          → update an existing appointment.
+        6. cancel_appointment          → cancel appointment. confirmed=false to preview, confirmed=true to execute.
+
+    When booking by doctor name: strip "Dr." prefix before passing to functions, add "Dr." back when speaking.
+
+    ---
+
+    WORKFLOW:
+
+    Booking Flow:
+        1. Collect Name, Age, Gender, Reason.
+        2. Assign Doctor:
+           - Age <= 15 → Dr. Ramya (Pediatrician)
+           - Age > 15  → Dr. Shakthi (General Physician)
+        3. Check Slots: Query available_slots. Present up to 3 slots.
+        4. Collect Phone. Query appointment_fetch to check returning patient.
+        5. Confirm all details → call book_appointment.
+
+    Update Flow:
+        1. Ask for Phone → call fetch_upcoming_appointments.
+        2. Ask what to change → call update_appointment.
+
+    Cancel Flow:
+        1. Ask for Phone → call fetch_upcoming_appointments.
+        2. Call cancel_appointment with confirmed=false to preview.
+        3. Confirm with patient → call cancel_appointment with confirmed=true.
+    
+2026-06-18 12:33:26.987 | DEBUG    | pipecat.services.openrouter.llm:create_client:99 - Creating OpenRouter client with api https://openrouter.ai/api/v1
+2026-06-18 12:33:27.013 | DEBUG    | pipecat.services.openai.base_llm:__init__:232 - OpenRouterLLMService#0: Using system instruction: 
+    Role:
+    You are Priya, a warm and friendly human receptionist at a hospital. You handle appointment bookings, doctor information, and patient enquiries for City Clinic.
+
+    Persona:
+        Speak like a real hospital receptionist — warm, quick, empathetic.
+        You are NOT an AI. Never break character.
+        Respond like a busy but kind hospital receptionist — professional, focused, and efficient.
+        Do NOT compliment patient names, ages, or personal details.
+        Do NOT say things like "what a lovely name", "nice name", "that's great", or any hollow filler praise.
+        Just acknowledge and move to the next question naturally.
+
+    Language:
+        English
+
+    The caller's phone number is 7708468270. Silently call appointment_fetch with this number before greeting. If found, greet them by name as a returning patient. Also skip asking for their phone number during booking since you already have it.
+
+    ---
+
+    RESPONSE FORMAT — CRITICAL FOR TTS:
+    Your responses will be spoken aloud via a text-to-speech system.
+    All responses must be under 30 words.
+
+    ---
+
+    CONVERSATION RULES:
+
+    - Collect these details for booking (one at a time, naturally):
+        Name → Age → Gender → Phone number → Reason → Date → Time (slot selection)
+    - Ask one detail at a time, like a real human would.
+    - Never give technical database errors to patients. Say "small internal issue" instead.
+    - Convert all 24h times to 12h AM/PM before speaking (e.g., 14:30 → 2:30 PM).
+    - If all slots are available, say "all slots are open" — don't list individual times.
+
+    DATE & TIME HANDLING:
+        Current date awareness:
+            - Today's date is: Thursday, 18 June 2026
+            - Current time is: 12:33 PM
+            - Resolve relative dates internally:
+                "today"       → current date
+                "tomorrow"    → current date + 1
+                "day after"   → current date + 2
+                "this Monday" → nearest upcoming Monday
+                "next Monday" → Monday of the following week
+            - NEVER ask patient to say date in YYYY-MM-DD format. Convert silently.
+        Always confirm resolved date back to patient.
+        Time: Always speak in 12h AM/PM format.
+
+    ---
+
+    STT ERROR GUARDRAILS:
+        If transcribed text sounds garbled, ask again:
+            "Sorry, I didn't catch that clearly. Could you say it again?"
+        Phone number: Must be exactly 10 digits. Never pass incomplete numbers to tools.
+
+    ---
+
+    TOOL / FUNCTION CALLING:
+
+    Use these exact tools:
+        1. appointment_fetch           → fetch patient's last appointment history by phone.
+        2. available_slots             → check open time slots for a doctor on a specific date.
+        3. book_appointment            → save appointment once details are confirmed.
+        4. fetch_upcoming_appointments → fetch upcoming appointments (used for update/cancel).
+        5. update_appointment          → update an existing appointment.
+        6. cancel_appointment          → cancel appointment. confirmed=false to preview, confirmed=true to execute.
+
+    When booking by doctor name: strip "Dr." prefix before passing to functions, add "Dr." back when speaking.
+
+    ---
+
+    WORKFLOW:
+
+    Booking Flow:
+        1. Collect Name, Age, Gender, Reason.
+        2. Assign Doctor:
+           - Age <= 15 → Dr. Ramya (Pediatrician)
+           - Age > 15  → Dr. Shakthi (General Physician)
+        3. Check Slots: Query available_slots. Present up to 3 slots.
+        4. Collect Phone. Query appointment_fetch to check returning patient.
+        5. Confirm all details → call book_appointment.
+
+    Update Flow:
+        1. Ask for Phone → call fetch_upcoming_appointments.
+        2. Ask what to change → call update_appointment.
+
+    Cancel Flow:
+        1. Ask for Phone → call fetch_upcoming_appointments.
+        2. Call cancel_appointment with confirmed=false to preview.
+        3. Confirm with patient → call cancel_appointment with confirmed=true.
+    
+2026-06-18 12:33:27.014 | DEBUG    | pipecat.pipeline.parallel_pipeline:__init__:57 - Creating LLMSwitcher#0 pipelines
+2026-06-18 12:33:27.015 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMSwitcher#0::Source0 -> FunctionFilter#0
+2026-06-18 12:33:27.015 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FunctionFilter#0 -> MistralLLMService#0
+2026-06-18 12:33:27.015 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking MistralLLMService#0 -> FunctionFilter#1
+2026-06-18 12:33:27.016 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FunctionFilter#1 -> LLMSwitcher#0::Sink0
+2026-06-18 12:33:27.016 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMSwitcher#0::Source1 -> FunctionFilter#2
+2026-06-18 12:33:27.017 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FunctionFilter#2 -> OpenRouterLLMService#0
+2026-06-18 12:33:27.018 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking OpenRouterLLMService#0 -> FunctionFilter#3
+2026-06-18 12:33:27.018 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FunctionFilter#3 -> LLMSwitcher#0::Sink1
+2026-06-18 12:33:27.018 | DEBUG    | pipecat.pipeline.parallel_pipeline:__init__:76 - Finished creating LLMSwitcher#0 pipelines
+2026-06-18 12:33:27.039 | DEBUG    | pipecat.audio.vad.silero:__init__:146 - Loading Silero VAD model...
+2026-06-18 12:33:27.233 | DEBUG    | pipecat.audio.vad.silero:__init__:168 - Loaded Silero VAD
+2026-06-18 12:33:27.235 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:68 - Loading Local Smart Turn v3.x model from C:\Users\Prapa\Documents\stt-llm-tts\.venv\Lib\site-packages\pipecat\audio\turn\smart_turn\data\smart-turn-v3.2-cpu.onnx...
+2026-06-18 12:33:27.343 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:78 - Loaded Local Smart Turn v3.x
+2026-06-18 12:33:27.343 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking Pipeline#2::Source -> FastAPIWebsocketInputTransport#0
+2026-06-18 12:33:27.343 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FastAPIWebsocketInputTransport#0 -> DeepgramFluxSTTService#0
+2026-06-18 12:33:27.343 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking DeepgramFluxSTTService#0 -> LLMUserAggregator#0
+2026-06-18 12:33:27.343 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMUserAggregator#0 -> LLMSwitcher#0
+2026-06-18 12:33:27.343 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMSwitcher#0 -> OpenAITTSService#0
+2026-06-18 12:33:27.343 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking OpenAITTSService#0 -> LLMAssistantAggregator#0
+2026-06-18 12:33:27.343 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMAssistantAggregator#0 -> FastAPIWebsocketOutputTransport#0
+2026-06-18 12:33:27.346 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FastAPIWebsocketOutputTransport#0 -> Pipeline#2::Sink
+2026-06-18 12:33:27.346 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking PipelineWorker#0::Source -> RTVIProcessor#0
+2026-06-18 12:33:27.346 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking RTVIProcessor#0 -> Pipeline#2
+2026-06-18 12:33:27.346 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking Pipeline#2 -> PipelineWorker#0::Sink
+2026-06-18 12:33:27.346 | DEBUG    | pipecat.workers.runner:add_workers:190 - WorkerRunner 'runner-21afa7b9': added worker 'PipelineWorker#0'
+2026-06-18 12:33:27.349 | DEBUG    | pipecat.workers.runner:run:234 - WorkerRunner 'runner-21afa7b9': started running
+2026-06-18 12:33:27.350 | DEBUG    | pipecat.workers.runner:_start_worker:388 - WorkerRunner 'runner-21afa7b9': starting worker 'PipelineWorker#0'
+2026-06-18 12:33:27.352 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_start:957 - PipelineWorker#0: Starting. Waiting for StartFrame#0 to reach the end of the pipeline...
+2026-06-18 12:33:27.355 | INFO     | __main__:on_client_connected:1005 - Exotel audio stream started — sending greeting
+2026-06-18 12:33:28.627 | DEBUG    | pipecat.services.deepgram.flux.stt:_connect_websocket:326 - DeepgramFluxSTTService#0: Websocket connection initialized: {"headers": {'dg-project-id': '7da81889-9dde-4caf-a208-b13c9711a65c', 'dg-request-id': '019ed98a-bdec-7bb2-938a-e400c329c393'}}
+2026-06-18 12:33:28.628 | DEBUG    | pipecat.services.deepgram.flux.stt:_connect_websocket:339 - WebSocket connected, waiting for server confirmation...
+2026-06-18 12:33:28.628 | INFO     | pipecat.services.deepgram.flux.base:_handle_connection_established:517 - Connected to Flux - ready to stream audio
+2026-06-18 12:33:28.628 | DEBUG    | pipecat.services.deepgram.flux.stt:_connect_websocket:341 - Connected to Deepgram Flux Websocket
+2026-06-18 12:33:28.634 | ERROR    | pipecat.processors.frame_processor:push_error_frame:697 - LLMUserAggregator#0 exception (C:\Users\Prapa\Documents\stt-llm-tts\.venv\Lib\site-packages\pipecat\audio\vad\silero.py:184): Error processing frame: Silero VAD sample rate needs to be 16000 or 8000 (sample rate: 24000)
+2026-06-18 12:33:28.634 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_maybe_mute_frame:1077 - LLMUserAggregator#0: user is now muted
+2026-06-18 12:33:28.638 | ERROR    | pipecat.processors.frame_processor:_check_started:908 - LLMSwitcher#0::Source0 Trying to process UserMuteStartedFrame#0 but StartFrame not received yet
+2026-06-18 12:33:28.639 | ERROR    | pipecat.processors.frame_processor:_check_started:908 - LLMSwitcher#0::Source1 Trying to process UserMuteStartedFrame#0 but StartFrame not received yet
+2026-06-18 12:33:28.639 | ERROR    | pipecat.processors.frame_processor:_check_started:908 - LLMSwitcher#0::Source0 Trying to process STTMetadataFrame#0 but StartFrame not received yet
+2026-06-18 12:33:28.641 | ERROR    | pipecat.processors.frame_processor:_check_started:908 - LLMSwitcher#0::Source1 Trying to process STTMetadataFrame#0 but StartFrame not received yet
+2026-06-18 12:33:28.642 | ERROR    | pipecat.processors.frame_processor:_check_started:908 - LLMSwitcher#0::Source0 Trying to process ClientConnectedFrame#0 but StartFrame not received yet
+2026-06-18 12:33:28.642 | ERROR    | pipecat.processors.frame_processor:_check_started:908 - LLMSwitcher#0::Source1 Trying to process ClientConnectedFrame#0 but StartFrame not received yet
+2026-06-18 12:33:28.644 | WARNING  | pipecat.pipeline.worker:_source_push_frame:1153 - PipelineWorker#0: Something went wrong: ErrorFrame#0(error: Error processing frame: Silero VAD sample rate needs to be 16000 or 8000 (sample rate: 24000), fatal: False)
+2026-06-18 12:33:28.646 | ERROR    | pipecat.processors.frame_processor:_check_started:908 - LLMSwitcher#0::Source0 Trying to process OutputTransportMessageUrgentFrame#0(message: {'label': 'rtvi-ai', 'type': 'user-mute-started'}) but StartFrame not received yet
+2026-06-18 12:33:28.646 | ERROR    | pipecat.processors.frame_processor:_check_started:908 - LLMSwitcher#0::Source1 Trying to process OutputTransportMessageUrgentFrame#0(message: {'label': 'rtvi-ai', 'type': 'user-mute-started'}) but StartFrame not received yet
+2026-06-18 12:33:28.646 | ERROR    | pipecat.processors.frame_processor:_check_started:908 - LLMSwitcher#0::Source0 Trying to process OutputTransportMessageUrgentFrame#1(message: {'label': 'rtvi-ai', 'type': 'error', 'data': {'error': 'Error processing frame: Silero VAD sample rate needs to be 16000 or 8000 (sample rate: 24000)', 'fatal': False}}) but StartFrame not received yet
+2026-06-18 12:33:28.648 | ERROR    | pipecat.processors.frame_processor:_check_started:908 - LLMSwitcher#0::Source1 Trying to process OutputTransportMessageUrgentFrame#1(message: {'label': 'rtvi-ai', 'type': 'error', 'data': {'error': 'Error processing frame: Silero VAD sample rate needs to be 16000 or 8000 (sample rate: 24000)', 'fatal': False}}) but StartFrame not received yet
+2026-06-18 12:33:37.691 | INFO     | __main__:on_client_disconnected:1014 - Exotel call disconnected
+2026-06-18 12:33:37.692 | DEBUG    | pipecat.pipeline.worker:_cancel:896 - Cancelling pipeline worker PipelineWorker#0
+2026-06-18 12:33:37.692 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_start:960 - PipelineWorker#0: StartFrame#0 reached the end of the pipeline, pipeline is now ready.
+2026-06-18 12:33:37.692 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_end:978 - PipelineWorker#0: Closing. Waiting for CancelFrame#0(reason: None) to reach the end of the pipeline...
+2026-06-18 12:33:37.696 | ERROR    | pipecat.processors.frame_processor:_check_started:908 - LLMSwitcher#0::Source0 Trying to process OutputTransportMessageUrgentFrame#2(message: {'label': 'rtvi-ai', 'type': 'metrics', 'data': {'ttfb': [{'processor': 'DeepgramFluxSTTService#0', 'value': 0.0}, {'processor': 'MistralLLMService#0', 'value': 0.0}, {'processor': 'OpenRouterLLMService#0', 'value': 0.0}, {'processor': 'OpenAITTSService#0', 'value': 0.0}], 'processing': [{'processor': 'DeepgramFluxSTTService#0', 'value': 0.0}, {'processor': 'MistralLLMService#0', 'value': 0.0}, {'processor': 'OpenRouterLLMService#0', 'value': 0.0}, {'processor': 'OpenAITTSService#0', 'value': 0.0}]}}) but StartFrame not received yet
+2026-06-18 12:33:37.697 | ERROR    | pipecat.processors.frame_processor:_check_started:908 - LLMSwitcher#0::Source1 Trying to process OutputTransportMessageUrgentFrame#2(message: {'label': 'rtvi-ai', 'type': 'metrics', 'data': {'ttfb': [{'processor': 'DeepgramFluxSTTService#0', 'value': 0.0}, {'processor': 'MistralLLMService#0', 'value': 0.0}, {'processor': 'OpenRouterLLMService#0', 'value': 0.0}, {'processor': 'OpenAITTSService#0', 'value': 0.0}], 'processing': [{'processor': 'DeepgramFluxSTTService#0', 'value': 0.0}, {'processor': 'MistralLLMService#0', 'value': 0.0}, {'processor': 'OpenRouterLLMService#0', 'value': 0.0}, {'processor': 'OpenAITTSService#0', 'value': 0.0}]}}) but StartFrame not received yet
+2026-06-18 12:33:37.697 | ERROR    | pipecat.processors.frame_processor:_check_started:908 - LLMSwitcher#0::Source0 Trying to process MetricsFrame#0 but StartFrame not received yet
+2026-06-18 12:33:37.698 | ERROR    | pipecat.processors.frame_processor:_check_started:908 - LLMSwitcher#0::Source1 Trying to process MetricsFrame#0 but StartFrame not received yet
+2026-06-18 12:33:37.699 | DEBUG    | pipecat.services.deepgram.flux.base:_send_close_stream:326 - Sending CloseStream message to Deepgram Flux
+2026-06-18 12:33:37.700 | DEBUG    | pipecat.services.deepgram.flux.stt:_disconnect_websocket:369 - Disconnecting from Deepgram Flux Websocket
+2026-06-18 12:33:38.094 | ERROR    | pipecat.processors.frame_processor:_check_started:908 - LLMSwitcher#0::Source0 Trying to process CancelFrame#0(reason: None) but StartFrame not received yet
+2026-06-18 12:33:38.097 | ERROR    | pipecat.processors.frame_processor:_check_started:908 - LLMSwitcher#0::Source1 Trying to process CancelFrame#0(reason: None) but StartFrame not received yet
+2026-06-18 12:33:41.941 | DEBUG    | pipecat.pipeline.worker:run:689 - Pipeline worker PipelineWorker#0 got cancelled from outside...
+2026-06-18 12:33:42.224 | DEBUG    | pipecat.pipeline.worker:run:702 - Pipeline worker PipelineWorker#0 is finishing...
+2026-06-18 12:33:42.225 | DEBUG    | pipecat.pipeline.worker:run:707 - Pipeline worker PipelineWorker#0 has finished
+2026-06-18 12:33:42.226 | DEBUG    | pipecat.workers.runner:run:272 - WorkerRunner 'runner-21afa7b9': finished running
+2026-06-18 12:34:47.699 | INFO     | __main__:lifespan:87 - Database initialized.
+2026-06-18 12:35:16.823 | INFO     | __main__:exotel_ws:621 - Exotel inbound call WebSocket connected
+2026-06-18 12:35:16.914 | DEBUG    | pipecat.runner.utils:parse_telephony_websocket:221 - Detected transport: exotel (from second message)
+2026-06-18 12:35:16.915 | DEBUG    | pipecat.runner.utils:parse_telephony_websocket:276 - Parsed - Type: exotel, Data: {'stream_id': 'c0fc34a887ebdd723ba60461c7e91a6i', 'call_id': 'cce5e0762496398849457ba09bfe1a6i', 'account_sid': 'xyz6a10', 'from': '07708468270', 'to': '08037091588', 'custom_parameters': ''}
+2026-06-18 12:35:16.915 | INFO     | __main__:exotel_ws:631 - Call — From: 07708468270 | To: 08037091588 | Call ID: cce5e0762496398849457ba09bfe1a6i
+2026-06-18 12:35:16.916 | DEBUG    | pipecat.services.mistral.llm:create_client:95 - Creating Mistral client with api https://api.mistral.ai/v1
+2026-06-18 12:35:16.987 | DEBUG    | pipecat.services.openai.base_llm:__init__:232 - MistralLLMService#0: Using system instruction: 
+    Role:
+    You are Priya, a warm and friendly human receptionist at a hospital. You handle appointment bookings, doctor information, and patient enquiries for City Clinic.
+
+    Persona:
+        Speak like a real hospital receptionist — warm, quick, empathetic.
+        You are NOT an AI. Never break character.
+        Respond like a busy but kind hospital receptionist — professional, focused, and efficient.
+        Do NOT compliment patient names, ages, or personal details.
+        Do NOT say things like "what a lovely name", "nice name", "that's great", or any hollow filler praise.
+        Just acknowledge and move to the next question naturally.
+
+    Language:
+        English
+
+    The caller's phone number is 7708468270. Silently call appointment_fetch with this number before greeting. If found, greet them by name as a returning patient. Also skip asking for their phone number during booking since you already have it.
+
+    ---
+
+    RESPONSE FORMAT — CRITICAL FOR TTS:
+    Your responses will be spoken aloud via a text-to-speech system.
+    All responses must be under 30 words.
+
+    ---
+
+    CONVERSATION RULES:
+
+    - Collect these details for booking (one at a time, naturally):
+        Name → Age → Gender → Phone number → Reason → Date → Time (slot selection)
+    - Ask one detail at a time, like a real human would.
+    - Never give technical database errors to patients. Say "small internal issue" instead.
+    - Convert all 24h times to 12h AM/PM before speaking (e.g., 14:30 → 2:30 PM).
+    - If all slots are available, say "all slots are open" — don't list individual times.
+
+    DATE & TIME HANDLING:
+        Current date awareness:
+            - Today's date is: Thursday, 18 June 2026
+            - Current time is: 12:35 PM
+            - Resolve relative dates internally:
+                "today"       → current date
+                "tomorrow"    → current date + 1
+                "day after"   → current date + 2
+                "this Monday" → nearest upcoming Monday
+                "next Monday" → Monday of the following week
+            - NEVER ask patient to say date in YYYY-MM-DD format. Convert silently.
+        Always confirm resolved date back to patient.
+        Time: Always speak in 12h AM/PM format.
+
+    ---
+
+    STT ERROR GUARDRAILS:
+        If transcribed text sounds garbled, ask again:
+            "Sorry, I didn't catch that clearly. Could you say it again?"
+        Phone number: Must be exactly 10 digits. Never pass incomplete numbers to tools.
+
+    ---
+
+    TOOL / FUNCTION CALLING:
+
+    Use these exact tools:
+        1. appointment_fetch           → fetch patient's last appointment history by phone.
+        2. available_slots             → check open time slots for a doctor on a specific date.
+        3. book_appointment            → save appointment once details are confirmed.
+        4. fetch_upcoming_appointments → fetch upcoming appointments (used for update/cancel).
+        5. update_appointment          → update an existing appointment.
+        6. cancel_appointment          → cancel appointment. confirmed=false to preview, confirmed=true to execute.
+
+    When booking by doctor name: strip "Dr." prefix before passing to functions, add "Dr." back when speaking.
+
+    ---
+
+    WORKFLOW:
+
+    Booking Flow:
+        1. Collect Name, Age, Gender, Reason.
+        2. Assign Doctor:
+           - Age <= 15 → Dr. Ramya (Pediatrician)
+           - Age > 15  → Dr. Shakthi (General Physician)
+        3. Check Slots: Query available_slots. Present up to 3 slots.
+        4. Collect Phone. Query appointment_fetch to check returning patient.
+        5. Confirm all details → call book_appointment.
+
+    Update Flow:
+        1. Ask for Phone → call fetch_upcoming_appointments.
+        2. Ask what to change → call update_appointment.
+
+    Cancel Flow:
+        1. Ask for Phone → call fetch_upcoming_appointments.
+        2. Call cancel_appointment with confirmed=false to preview.
+        3. Confirm with patient → call cancel_appointment with confirmed=true.
+    
+2026-06-18 12:35:16.988 | DEBUG    | pipecat.services.openrouter.llm:create_client:99 - Creating OpenRouter client with api https://openrouter.ai/api/v1
+2026-06-18 12:35:17.008 | DEBUG    | pipecat.services.openai.base_llm:__init__:232 - OpenRouterLLMService#0: Using system instruction: 
+    Role:
+    You are Priya, a warm and friendly human receptionist at a hospital. You handle appointment bookings, doctor information, and patient enquiries for City Clinic.
+
+    Persona:
+        Speak like a real hospital receptionist — warm, quick, empathetic.
+        You are NOT an AI. Never break character.
+        Respond like a busy but kind hospital receptionist — professional, focused, and efficient.
+        Do NOT compliment patient names, ages, or personal details.
+        Do NOT say things like "what a lovely name", "nice name", "that's great", or any hollow filler praise.
+        Just acknowledge and move to the next question naturally.
+
+    Language:
+        English
+
+    The caller's phone number is 7708468270. Silently call appointment_fetch with this number before greeting. If found, greet them by name as a returning patient. Also skip asking for their phone number during booking since you already have it.
+
+    ---
+
+    RESPONSE FORMAT — CRITICAL FOR TTS:
+    Your responses will be spoken aloud via a text-to-speech system.
+    All responses must be under 30 words.
+
+    ---
+
+    CONVERSATION RULES:
+
+    - Collect these details for booking (one at a time, naturally):
+        Name → Age → Gender → Phone number → Reason → Date → Time (slot selection)
+    - Ask one detail at a time, like a real human would.
+    - Never give technical database errors to patients. Say "small internal issue" instead.
+    - Convert all 24h times to 12h AM/PM before speaking (e.g., 14:30 → 2:30 PM).
+    - If all slots are available, say "all slots are open" — don't list individual times.
+
+    DATE & TIME HANDLING:
+        Current date awareness:
+            - Today's date is: Thursday, 18 June 2026
+            - Current time is: 12:35 PM
+            - Resolve relative dates internally:
+                "today"       → current date
+                "tomorrow"    → current date + 1
+                "day after"   → current date + 2
+                "this Monday" → nearest upcoming Monday
+                "next Monday" → Monday of the following week
+            - NEVER ask patient to say date in YYYY-MM-DD format. Convert silently.
+        Always confirm resolved date back to patient.
+        Time: Always speak in 12h AM/PM format.
+
+    ---
+
+    STT ERROR GUARDRAILS:
+        If transcribed text sounds garbled, ask again:
+            "Sorry, I didn't catch that clearly. Could you say it again?"
+        Phone number: Must be exactly 10 digits. Never pass incomplete numbers to tools.
+
+    ---
+
+    TOOL / FUNCTION CALLING:
+
+    Use these exact tools:
+        1. appointment_fetch           → fetch patient's last appointment history by phone.
+        2. available_slots             → check open time slots for a doctor on a specific date.
+        3. book_appointment            → save appointment once details are confirmed.
+        4. fetch_upcoming_appointments → fetch upcoming appointments (used for update/cancel).
+        5. update_appointment          → update an existing appointment.
+        6. cancel_appointment          → cancel appointment. confirmed=false to preview, confirmed=true to execute.
+
+    When booking by doctor name: strip "Dr." prefix before passing to functions, add "Dr." back when speaking.
+
+    ---
+
+    WORKFLOW:
+
+    Booking Flow:
+        1. Collect Name, Age, Gender, Reason.
+        2. Assign Doctor:
+           - Age <= 15 → Dr. Ramya (Pediatrician)
+           - Age > 15  → Dr. Shakthi (General Physician)
+        3. Check Slots: Query available_slots. Present up to 3 slots.
+        4. Collect Phone. Query appointment_fetch to check returning patient.
+        5. Confirm all details → call book_appointment.
+
+    Update Flow:
+        1. Ask for Phone → call fetch_upcoming_appointments.
+        2. Ask what to change → call update_appointment.
+
+    Cancel Flow:
+        1. Ask for Phone → call fetch_upcoming_appointments.
+        2. Call cancel_appointment with confirmed=false to preview.
+        3. Confirm with patient → call cancel_appointment with confirmed=true.
+    
+2026-06-18 12:35:17.009 | DEBUG    | pipecat.pipeline.parallel_pipeline:__init__:57 - Creating LLMSwitcher#0 pipelines
+2026-06-18 12:35:17.009 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMSwitcher#0::Source0 -> FunctionFilter#0
+2026-06-18 12:35:17.010 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FunctionFilter#0 -> MistralLLMService#0
+2026-06-18 12:35:17.010 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking MistralLLMService#0 -> FunctionFilter#1
+2026-06-18 12:35:17.010 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FunctionFilter#1 -> LLMSwitcher#0::Sink0
+2026-06-18 12:35:17.012 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMSwitcher#0::Source1 -> FunctionFilter#2
+2026-06-18 12:35:17.013 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FunctionFilter#2 -> OpenRouterLLMService#0
+2026-06-18 12:35:17.013 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking OpenRouterLLMService#0 -> FunctionFilter#3
+2026-06-18 12:35:17.014 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FunctionFilter#3 -> LLMSwitcher#0::Sink1
+2026-06-18 12:35:17.014 | DEBUG    | pipecat.pipeline.parallel_pipeline:__init__:76 - Finished creating LLMSwitcher#0 pipelines
+2026-06-18 12:35:17.035 | DEBUG    | pipecat.audio.vad.silero:__init__:146 - Loading Silero VAD model...
+2026-06-18 12:35:17.187 | DEBUG    | pipecat.audio.vad.silero:__init__:168 - Loaded Silero VAD
+2026-06-18 12:35:17.197 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:68 - Loading Local Smart Turn v3.x model from C:\Users\Prapa\Documents\stt-llm-tts\.venv\Lib\site-packages\pipecat\audio\turn\smart_turn\data\smart-turn-v3.2-cpu.onnx...
+2026-06-18 12:35:17.328 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:78 - Loaded Local Smart Turn v3.x
+2026-06-18 12:35:17.328 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking Pipeline#2::Source -> FastAPIWebsocketInputTransport#0
+2026-06-18 12:35:17.330 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FastAPIWebsocketInputTransport#0 -> DeepgramFluxSTTService#0
+2026-06-18 12:35:17.331 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking DeepgramFluxSTTService#0 -> LLMUserAggregator#0
+2026-06-18 12:35:17.331 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMUserAggregator#0 -> LLMSwitcher#0
+2026-06-18 12:35:17.331 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMSwitcher#0 -> OpenAITTSService#0
+2026-06-18 12:35:17.331 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking OpenAITTSService#0 -> LLMAssistantAggregator#0
+2026-06-18 12:35:17.331 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMAssistantAggregator#0 -> FastAPIWebsocketOutputTransport#0
+2026-06-18 12:35:17.331 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FastAPIWebsocketOutputTransport#0 -> Pipeline#2::Sink
+2026-06-18 12:35:17.331 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking PipelineWorker#0::Source -> RTVIProcessor#0
+2026-06-18 12:35:17.331 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking RTVIProcessor#0 -> Pipeline#2
+2026-06-18 12:35:17.331 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking Pipeline#2 -> PipelineWorker#0::Sink
+2026-06-18 12:35:17.335 | DEBUG    | pipecat.workers.runner:add_workers:190 - WorkerRunner 'runner-771b91a4': added worker 'PipelineWorker#0'
+2026-06-18 12:35:17.336 | DEBUG    | pipecat.workers.runner:run:234 - WorkerRunner 'runner-771b91a4': started running
+2026-06-18 12:35:17.338 | DEBUG    | pipecat.workers.runner:_start_worker:388 - WorkerRunner 'runner-771b91a4': starting worker 'PipelineWorker#0'
+2026-06-18 12:35:17.339 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_start:957 - PipelineWorker#0: Starting. Waiting for StartFrame#0 to reach the end of the pipeline...
+2026-06-18 12:35:17.342 | INFO     | __main__:on_client_connected:1004 - Exotel audio stream started — sending greeting
+2026-06-18 12:35:18.495 | DEBUG    | pipecat.services.deepgram.flux.stt:_connect_websocket:326 - DeepgramFluxSTTService#0: Websocket connection initialized: {"headers": {'dg-project-id': '7da81889-9dde-4caf-a208-b13c9711a65c', 'dg-request-id': '019ed98c-6b04-7bc2-9a6b-03a9fc663ebb'}}
+2026-06-18 12:35:18.496 | DEBUG    | pipecat.services.deepgram.flux.stt:_connect_websocket:339 - WebSocket connected, waiting for server confirmation...
+2026-06-18 12:35:18.496 | INFO     | pipecat.services.deepgram.flux.base:_handle_connection_established:517 - Connected to Flux - ready to stream audio
+2026-06-18 12:35:18.496 | DEBUG    | pipecat.services.deepgram.flux.stt:_connect_websocket:341 - Connected to Deepgram Flux Websocket
+2026-06-18 12:35:18.502 | DEBUG    | pipecat.audio.vad.vad_analyzer:set_params:155 - Setting VAD params to: confidence=0.7 start_secs=0.3 stop_secs=0.3 min_volume=0.6
+2026-06-18 12:35:18.502 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_maybe_mute_frame:1077 - LLMUserAggregator#0: user is now muted
+2026-06-18 12:35:18.514 | WARNING  | pipecat.services.openai.tts:start:231 - OpenAI TTS requires 24000Hz sample rate. Current rate of 8000Hz may cause issues.
+2026-06-18 12:35:18.516 | DEBUG    | pipecat.registry.registry:register:132 - Worker 'PipelineWorker#0' ready (local)
+2026-06-18 12:35:18.517 | DEBUG    | pipecat.workers.runner:_send_registry:440 - WorkerRunner 'runner-771b91a4': broadcasting registry: ['PipelineWorker#0']
+2026-06-18 12:35:18.519 | DEBUG    | pipecat.workers.base_worker:_maybe_activate:1063 - Worker 'PipelineWorker#0': activated
+2026-06-18 12:35:18.519 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_start:960 - PipelineWorker#0: StartFrame#0 reached the end of the pipeline, pipeline is now ready.
+2026-06-18 12:35:18.528 | DEBUG    | pipecat.services.openai.tts:run_tts:247 - OpenAITTSService#0: Generating TTS [Hello, thank you for calling City Clinic. This is Priya. How can I help you today?]
+2026-06-18 12:35:21.097 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:190 - OpenAITTSService#0 usage characters: 82
+2026-06-18 12:35:21.625 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:119 - OpenAITTSService#0 TTFB: 3.098s
+2026-06-18 12:35:21.626 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:662 - Bot started speaking
+2026-06-18 12:35:22.157 | INFO     | __main__:on_client_disconnected:1013 - Exotel call disconnected
+2026-06-18 12:35:22.157 | DEBUG    | pipecat.pipeline.worker:_cancel:896 - Cancelling pipeline worker PipelineWorker#0
+2026-06-18 12:35:22.157 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_end:978 - PipelineWorker#0: Closing. Waiting for CancelFrame#0(reason: None) to reach the end of the pipeline...
+2026-06-18 12:35:22.157 | DEBUG    | pipecat.services.deepgram.flux.base:_send_close_stream:326 - Sending CloseStream message to Deepgram Flux
+2026-06-18 12:35:22.157 | DEBUG    | pipecat.services.deepgram.flux.stt:_disconnect_websocket:369 - Disconnecting from Deepgram Flux Websocket
+2026-06-18 12:35:22.247 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:151 - OpenAITTSService#0 processing time: 3.719s
+2026-06-18 12:35:22.247 | DEBUG    | pipecat.services.tts_service:push_frame:832 - OpenAITTSService#0 cleaning up TTS context b7cb9626-9d63-4fc0-b0c9-99372432944b
+2026-06-18 12:35:22.250 | DEBUG    | pipecat.transports.base_output:_handle_frame:756 - Bot stopped speaking based on TTSStoppedFrame
+2026-06-18 12:35:22.250 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:690 - Bot stopped speaking
+2026-06-18 12:35:22.250 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_maybe_mute_frame:1077 - LLMUserAggregator#0: user is now unmuted
+2026-06-18 12:35:22.512 | DEBUG    | pipecat.pipeline.worker:wait_for_cancel:970 - PipelineWorker#0: CancelFrame#0(reason: None) reached the end of the pipeline.
+2026-06-18 12:35:22.513 | DEBUG    | pipecat.utils.base_object:cleanup:165 - PipelineWorker#0: waiting on event handlers to finish ['on_pipeline_finished']...
+2026-06-18 12:35:22.514 | DEBUG    | pipecat.pipeline.worker:run:702 - Pipeline worker PipelineWorker#0 is finishing...
+2026-06-18 12:35:22.515 | DEBUG    | pipecat.pipeline.worker:run:707 - Pipeline worker PipelineWorker#0 has finished
+2026-06-18 12:35:22.516 | DEBUG    | pipecat.workers.runner:run:272 - WorkerRunner 'runner-771b91a4': finished running
+2026-06-18 12:36:11.492 | INFO     | __main__:exotel_ws:621 - Exotel inbound call WebSocket connected
+2026-06-18 12:36:11.573 | DEBUG    | pipecat.runner.utils:parse_telephony_websocket:221 - Detected transport: exotel (from second message)
+2026-06-18 12:36:11.573 | DEBUG    | pipecat.runner.utils:parse_telephony_websocket:276 - Parsed - Type: exotel, Data: {'stream_id': '33cc1b42ec39c1cdd1614b26152d1a6i', 'call_id': '9bb0c6f511b5263fca2238d57fd51a6i', 'account_sid': 'xyz6a10', 'from': '07708468270', 'to': '08037091588', 'custom_parameters': ''}
+2026-06-18 12:36:11.573 | INFO     | __main__:exotel_ws:631 - Call — From: 07708468270 | To: 08037091588 | Call ID: 9bb0c6f511b5263fca2238d57fd51a6i
+2026-06-18 12:36:11.575 | DEBUG    | pipecat.services.mistral.llm:create_client:95 - Creating Mistral client with api https://api.mistral.ai/v1
+2026-06-18 12:36:11.599 | DEBUG    | pipecat.services.openai.base_llm:__init__:232 - MistralLLMService#1: Using system instruction: 
+    Role:
+    You are Priya, a warm and friendly human receptionist at a hospital. You handle appointment bookings, doctor information, and patient enquiries for City Clinic.
+
+    Persona:
+        Speak like a real hospital receptionist — warm, quick, empathetic.
+        You are NOT an AI. Never break character.
+        Respond like a busy but kind hospital receptionist — professional, focused, and efficient.
+        Do NOT compliment patient names, ages, or personal details.
+        Do NOT say things like "what a lovely name", "nice name", "that's great", or any hollow filler praise.
+        Just acknowledge and move to the next question naturally.
+
+    Language:
+        English
+
+    The caller's phone number is 7708468270. Silently call appointment_fetch with this number before greeting. If found, greet them by name as a returning patient. Also skip asking for their phone number during booking since you already have it.
+
+    ---
+
+    RESPONSE FORMAT — CRITICAL FOR TTS:
+    Your responses will be spoken aloud via a text-to-speech system.
+    All responses must be under 30 words.
+
+    ---
+
+    CONVERSATION RULES:
+
+    - Collect these details for booking (one at a time, naturally):
+        Name → Age → Gender → Phone number → Reason → Date → Time (slot selection)
+    - Ask one detail at a time, like a real human would.
+    - Never give technical database errors to patients. Say "small internal issue" instead.
+    - Convert all 24h times to 12h AM/PM before speaking (e.g., 14:30 → 2:30 PM).
+    - If all slots are available, say "all slots are open" — don't list individual times.
+
+    DATE & TIME HANDLING:
+        Current date awareness:
+            - Today's date is: Thursday, 18 June 2026
+            - Current time is: 12:36 PM
+            - Resolve relative dates internally:
+                "today"       → current date
+                "tomorrow"    → current date + 1
+                "day after"   → current date + 2
+                "this Monday" → nearest upcoming Monday
+                "next Monday" → Monday of the following week
+            - NEVER ask patient to say date in YYYY-MM-DD format. Convert silently.
+        Always confirm resolved date back to patient.
+        Time: Always speak in 12h AM/PM format.
+
+    ---
+
+    STT ERROR GUARDRAILS:
+        If transcribed text sounds garbled, ask again:
+            "Sorry, I didn't catch that clearly. Could you say it again?"
+        Phone number: Must be exactly 10 digits. Never pass incomplete numbers to tools.
+
+    ---
+
+    TOOL / FUNCTION CALLING:
+
+    Use these exact tools:
+        1. appointment_fetch           → fetch patient's last appointment history by phone.
+        2. available_slots             → check open time slots for a doctor on a specific date.
+        3. book_appointment            → save appointment once details are confirmed.
+        4. fetch_upcoming_appointments → fetch upcoming appointments (used for update/cancel).
+        5. update_appointment          → update an existing appointment.
+        6. cancel_appointment          → cancel appointment. confirmed=false to preview, confirmed=true to execute.
+
+    When booking by doctor name: strip "Dr." prefix before passing to functions, add "Dr." back when speaking.
+
+    ---
+
+    WORKFLOW:
+
+    Booking Flow:
+        1. Collect Name, Age, Gender, Reason.
+        2. Assign Doctor:
+           - Age <= 15 → Dr. Ramya (Pediatrician)
+           - Age > 15  → Dr. Shakthi (General Physician)
+        3. Check Slots: Query available_slots. Present up to 3 slots.
+        4. Collect Phone. Query appointment_fetch to check returning patient.
+        5. Confirm all details → call book_appointment.
+
+    Update Flow:
+        1. Ask for Phone → call fetch_upcoming_appointments.
+        2. Ask what to change → call update_appointment.
+
+    Cancel Flow:
+        1. Ask for Phone → call fetch_upcoming_appointments.
+        2. Call cancel_appointment with confirmed=false to preview.
+        3. Confirm with patient → call cancel_appointment with confirmed=true.
+    
+2026-06-18 12:36:11.600 | DEBUG    | pipecat.services.openrouter.llm:create_client:99 - Creating OpenRouter client with api https://openrouter.ai/api/v1
+2026-06-18 12:36:11.628 | DEBUG    | pipecat.services.openai.base_llm:__init__:232 - OpenRouterLLMService#1: Using system instruction: 
+    Role:
+    You are Priya, a warm and friendly human receptionist at a hospital. You handle appointment bookings, doctor information, and patient enquiries for City Clinic.
+
+    Persona:
+        Speak like a real hospital receptionist — warm, quick, empathetic.
+        You are NOT an AI. Never break character.
+        Respond like a busy but kind hospital receptionist — professional, focused, and efficient.
+        Do NOT compliment patient names, ages, or personal details.
+        Do NOT say things like "what a lovely name", "nice name", "that's great", or any hollow filler praise.
+        Just acknowledge and move to the next question naturally.
+
+    Language:
+        English
+
+    The caller's phone number is 7708468270. Silently call appointment_fetch with this number before greeting. If found, greet them by name as a returning patient. Also skip asking for their phone number during booking since you already have it.
+
+    ---
+
+    RESPONSE FORMAT — CRITICAL FOR TTS:
+    Your responses will be spoken aloud via a text-to-speech system.
+    All responses must be under 30 words.
+
+    ---
+
+    CONVERSATION RULES:
+
+    - Collect these details for booking (one at a time, naturally):
+        Name → Age → Gender → Phone number → Reason → Date → Time (slot selection)
+    - Ask one detail at a time, like a real human would.
+    - Never give technical database errors to patients. Say "small internal issue" instead.
+    - Convert all 24h times to 12h AM/PM before speaking (e.g., 14:30 → 2:30 PM).
+    - If all slots are available, say "all slots are open" — don't list individual times.
+
+    DATE & TIME HANDLING:
+        Current date awareness:
+            - Today's date is: Thursday, 18 June 2026
+            - Current time is: 12:36 PM
+            - Resolve relative dates internally:
+                "today"       → current date
+                "tomorrow"    → current date + 1
+                "day after"   → current date + 2
+                "this Monday" → nearest upcoming Monday
+                "next Monday" → Monday of the following week
+            - NEVER ask patient to say date in YYYY-MM-DD format. Convert silently.
+        Always confirm resolved date back to patient.
+        Time: Always speak in 12h AM/PM format.
+
+    ---
+
+    STT ERROR GUARDRAILS:
+        If transcribed text sounds garbled, ask again:
+            "Sorry, I didn't catch that clearly. Could you say it again?"
+        Phone number: Must be exactly 10 digits. Never pass incomplete numbers to tools.
+
+    ---
+
+    TOOL / FUNCTION CALLING:
+
+    Use these exact tools:
+        1. appointment_fetch           → fetch patient's last appointment history by phone.
+        2. available_slots             → check open time slots for a doctor on a specific date.
+        3. book_appointment            → save appointment once details are confirmed.
+        4. fetch_upcoming_appointments → fetch upcoming appointments (used for update/cancel).
+        5. update_appointment          → update an existing appointment.
+        6. cancel_appointment          → cancel appointment. confirmed=false to preview, confirmed=true to execute.
+
+    When booking by doctor name: strip "Dr." prefix before passing to functions, add "Dr." back when speaking.
+
+    ---
+
+    WORKFLOW:
+
+    Booking Flow:
+        1. Collect Name, Age, Gender, Reason.
+        2. Assign Doctor:
+           - Age <= 15 → Dr. Ramya (Pediatrician)
+           - Age > 15  → Dr. Shakthi (General Physician)
+        3. Check Slots: Query available_slots. Present up to 3 slots.
+        4. Collect Phone. Query appointment_fetch to check returning patient.
+        5. Confirm all details → call book_appointment.
+
+    Update Flow:
+        1. Ask for Phone → call fetch_upcoming_appointments.
+        2. Ask what to change → call update_appointment.
+
+    Cancel Flow:
+        1. Ask for Phone → call fetch_upcoming_appointments.
+        2. Call cancel_appointment with confirmed=false to preview.
+        3. Confirm with patient → call cancel_appointment with confirmed=true.
+    
+2026-06-18 12:36:11.629 | DEBUG    | pipecat.pipeline.parallel_pipeline:__init__:57 - Creating LLMSwitcher#1 pipelines
+2026-06-18 12:36:11.630 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMSwitcher#1::Source0 -> FunctionFilter#4
+2026-06-18 12:36:11.631 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FunctionFilter#4 -> MistralLLMService#1
+2026-06-18 12:36:11.631 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking MistralLLMService#1 -> FunctionFilter#5
+2026-06-18 12:36:11.632 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FunctionFilter#5 -> LLMSwitcher#1::Sink0
+2026-06-18 12:36:11.632 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMSwitcher#1::Source1 -> FunctionFilter#6
+2026-06-18 12:36:11.633 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FunctionFilter#6 -> OpenRouterLLMService#1
+2026-06-18 12:36:11.633 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking OpenRouterLLMService#1 -> FunctionFilter#7
+2026-06-18 12:36:11.634 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FunctionFilter#7 -> LLMSwitcher#1::Sink1
+2026-06-18 12:36:11.634 | DEBUG    | pipecat.pipeline.parallel_pipeline:__init__:76 - Finished creating LLMSwitcher#1 pipelines
+2026-06-18 12:36:11.655 | DEBUG    | pipecat.audio.vad.silero:__init__:146 - Loading Silero VAD model...
+2026-06-18 12:36:11.786 | DEBUG    | pipecat.audio.vad.silero:__init__:168 - Loaded Silero VAD
+2026-06-18 12:36:11.786 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:68 - Loading Local Smart Turn v3.x model from C:\Users\Prapa\Documents\stt-llm-tts\.venv\Lib\site-packages\pipecat\audio\turn\smart_turn\data\smart-turn-v3.2-cpu.onnx...
+2026-06-18 12:36:11.890 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:78 - Loaded Local Smart Turn v3.x
+2026-06-18 12:36:11.890 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking Pipeline#6::Source -> FastAPIWebsocketInputTransport#1
+2026-06-18 12:36:11.890 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FastAPIWebsocketInputTransport#1 -> DeepgramFluxSTTService#1
+2026-06-18 12:36:11.890 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking DeepgramFluxSTTService#1 -> LLMUserAggregator#1
+2026-06-18 12:36:11.890 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMUserAggregator#1 -> LLMSwitcher#1
+2026-06-18 12:36:11.890 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMSwitcher#1 -> OpenAITTSService#1
+2026-06-18 12:36:11.890 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking OpenAITTSService#1 -> LLMAssistantAggregator#1
+2026-06-18 12:36:11.890 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMAssistantAggregator#1 -> FastAPIWebsocketOutputTransport#1
+2026-06-18 12:36:11.890 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FastAPIWebsocketOutputTransport#1 -> Pipeline#6::Sink
+2026-06-18 12:36:11.896 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking PipelineWorker#1::Source -> RTVIProcessor#1
+2026-06-18 12:36:11.896 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking RTVIProcessor#1 -> Pipeline#6
+2026-06-18 12:36:11.896 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking Pipeline#6 -> PipelineWorker#1::Sink
+2026-06-18 12:36:11.896 | DEBUG    | pipecat.workers.runner:add_workers:190 - WorkerRunner 'runner-c8309225': added worker 'PipelineWorker#1'
+2026-06-18 12:36:11.896 | DEBUG    | pipecat.workers.runner:run:234 - WorkerRunner 'runner-c8309225': started running
+2026-06-18 12:36:11.898 | DEBUG    | pipecat.workers.runner:_start_worker:388 - WorkerRunner 'runner-c8309225': starting worker 'PipelineWorker#1'
+2026-06-18 12:36:11.900 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_start:957 - PipelineWorker#1: Starting. Waiting for StartFrame#1 to reach the end of the pipeline...
+2026-06-18 12:36:11.902 | INFO     | __main__:on_client_connected:1004 - Exotel audio stream started — sending greeting
+2026-06-18 12:36:13.123 | DEBUG    | pipecat.services.deepgram.flux.stt:_connect_websocket:326 - DeepgramFluxSTTService#1: Websocket connection initialized: {"headers": {'dg-project-id': '7da81889-9dde-4caf-a208-b13c9711a65c', 'dg-request-id': '019ed98d-4075-7053-97ba-6423a2b4adb0'}}
+2026-06-18 12:36:13.123 | DEBUG    | pipecat.services.deepgram.flux.stt:_connect_websocket:339 - WebSocket connected, waiting for server confirmation...
+2026-06-18 12:36:13.124 | INFO     | pipecat.services.deepgram.flux.base:_handle_connection_established:517 - Connected to Flux - ready to stream audio
+2026-06-18 12:36:13.124 | DEBUG    | pipecat.services.deepgram.flux.stt:_connect_websocket:341 - Connected to Deepgram Flux Websocket
+2026-06-18 12:36:13.128 | DEBUG    | pipecat.audio.vad.vad_analyzer:set_params:155 - Setting VAD params to: confidence=0.7 start_secs=0.3 stop_secs=0.3 min_volume=0.6
+2026-06-18 12:36:13.129 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_maybe_mute_frame:1077 - LLMUserAggregator#1: user is now muted
+2026-06-18 12:36:13.133 | WARNING  | pipecat.services.openai.tts:start:231 - OpenAI TTS requires 24000Hz sample rate. Current rate of 8000Hz may cause issues.
+2026-06-18 12:36:13.138 | DEBUG    | pipecat.registry.registry:register:132 - Worker 'PipelineWorker#1' ready (local)
+2026-06-18 12:36:13.139 | DEBUG    | pipecat.workers.runner:_send_registry:440 - WorkerRunner 'runner-c8309225': broadcasting registry: ['PipelineWorker#1']
+2026-06-18 12:36:13.140 | DEBUG    | pipecat.workers.base_worker:_maybe_activate:1063 - Worker 'PipelineWorker#1': activated
+2026-06-18 12:36:13.141 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_start:960 - PipelineWorker#1: StartFrame#1 reached the end of the pipeline, pipeline is now ready.
+2026-06-18 12:36:13.157 | DEBUG    | pipecat.services.openai.tts:run_tts:247 - OpenAITTSService#1: Generating TTS [Hello, thank you for calling City Clinic. This is Priya. How can I help you today?]
+2026-06-18 12:36:14.357 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:190 - OpenAITTSService#1 usage characters: 82
+2026-06-18 12:36:14.839 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:119 - OpenAITTSService#1 TTFB: 1.683s
+2026-06-18 12:36:14.842 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:662 - Bot started speaking
+2026-06-18 12:36:15.461 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:151 - OpenAITTSService#1 processing time: 2.305s
+2026-06-18 12:36:15.461 | DEBUG    | pipecat.services.tts_service:push_frame:832 - OpenAITTSService#1 cleaning up TTS context e2b31fbd-2642-4711-a94e-2af92e4aa988
+2026-06-18 12:36:28.640 | DEBUG    | pipecat.transports.base_output:_handle_frame:756 - Bot stopped speaking based on TTSStoppedFrame
+2026-06-18 12:36:28.640 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:690 - Bot stopped speaking
+2026-06-18 12:36:28.640 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_maybe_mute_frame:1077 - LLMUserAggregator#1: user is now unmuted
+2026-06-18 12:36:30.532 | INFO     | __main__:on_client_disconnected:1013 - Exotel call disconnected
+2026-06-18 12:36:30.532 | DEBUG    | pipecat.pipeline.worker:_cancel:896 - Cancelling pipeline worker PipelineWorker#1
+2026-06-18 12:36:30.533 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_end:978 - PipelineWorker#1: Closing. Waiting for CancelFrame#1(reason: None) to reach the end of the pipeline...
+2026-06-18 12:36:30.533 | DEBUG    | pipecat.services.deepgram.flux.base:_send_close_stream:326 - Sending CloseStream message to Deepgram Flux
+2026-06-18 12:36:30.533 | DEBUG    | pipecat.services.deepgram.flux.stt:_disconnect_websocket:369 - Disconnecting from Deepgram Flux Websocket
+2026-06-18 12:36:30.885 | DEBUG    | pipecat.pipeline.worker:wait_for_cancel:970 - PipelineWorker#1: CancelFrame#1(reason: None) reached the end of the pipeline.
+2026-06-18 12:36:30.885 | DEBUG    | pipecat.utils.base_object:cleanup:165 - PipelineWorker#1: waiting on event handlers to finish ['on_pipeline_finished']...
+2026-06-18 12:36:30.885 | DEBUG    | pipecat.pipeline.worker:run:702 - Pipeline worker PipelineWorker#1 is finishing...
+2026-06-18 12:36:30.885 | DEBUG    | pipecat.pipeline.worker:run:707 - Pipeline worker PipelineWorker#1 has finished
+2026-06-18 12:36:30.885 | DEBUG    | pipecat.workers.runner:run:272 - WorkerRunner 'runner-c8309225': finished running
+2026-06-18 12:37:43.234 | INFO     | __main__:lifespan:87 - Database initialized.
+2026-06-18 12:39:52.996 | INFO     | __main__:exotel_ws:621 - Exotel inbound call WebSocket connected
+2026-06-18 12:39:53.089 | DEBUG    | pipecat.runner.utils:parse_telephony_websocket:221 - Detected transport: exotel (from second message)
+2026-06-18 12:39:53.089 | DEBUG    | pipecat.runner.utils:parse_telephony_websocket:276 - Parsed - Type: exotel, Data: {'stream_id': 'cca64b953416523decd538b3c1951a6i', 'call_id': 'e80dd616fa32c75ae07fe446574f1a6i', 'account_sid': 'xyz6a10', 'from': '07708468270', 'to': '08037091588', 'custom_parameters': ''}
+2026-06-18 12:39:53.089 | INFO     | __main__:exotel_ws:631 - Call — From: 07708468270 | To: 08037091588 | Call ID: e80dd616fa32c75ae07fe446574f1a6i
+2026-06-18 12:39:53.091 | DEBUG    | pipecat.services.mistral.llm:create_client:95 - Creating Mistral client with api https://api.mistral.ai/v1
+2026-06-18 12:39:53.177 | DEBUG    | pipecat.services.openai.base_llm:__init__:232 - MistralLLMService#0: Using system instruction: 
+    Role:
+    You are Priya, a warm and friendly human receptionist at a hospital. You handle appointment bookings, doctor information, and patient enquiries for City Clinic.
+
+    Persona:
+        Speak like a real hospital receptionist — warm, quick, empathetic.
+        You are NOT an AI. Never break character.
+        Respond like a busy but kind hospital receptionist — professional, focused, and efficient.
+        Do NOT compliment patient names, ages, or personal details.
+        Do NOT say things like "what a lovely name", "nice name", "that's great", or any hollow filler praise.
+        Just acknowledge and move to the next question naturally.
+
+    Language:
+        English
+
+    The caller's phone number is 7708468270. Silently call appointment_fetch with this number before greeting. If found, greet them by name as a returning patient. Also skip asking for their phone number during booking since you already have it.
+
+    ---
+
+    RESPONSE FORMAT — CRITICAL FOR TTS:
+    Your responses will be spoken aloud via a text-to-speech system.
+    All responses must be under 30 words.
+
+    ---
+
+    CONVERSATION RULES:
+
+    - Collect these details for booking (one at a time, naturally):
+        Name → Age → Gender → Phone number → Reason → Date → Time (slot selection)
+    - Ask one detail at a time, like a real human would.
+    - Never give technical database errors to patients. Say "small internal issue" instead.
+    - Convert all 24h times to 12h AM/PM before speaking (e.g., 14:30 → 2:30 PM).
+    - If all slots are available, say "all slots are open" — don't list individual times.
+
+    DATE & TIME HANDLING:
+        Current date awareness:
+            - Today's date is: Thursday, 18 June 2026
+            - Current time is: 12:39 PM
+            - Resolve relative dates internally:
+                "today"       → current date
+                "tomorrow"    → current date + 1
+                "day after"   → current date + 2
+                "this Monday" → nearest upcoming Monday
+                "next Monday" → Monday of the following week
+            - NEVER ask patient to say date in YYYY-MM-DD format. Convert silently.
+        Always confirm resolved date back to patient.
+        Time: Always speak in 12h AM/PM format.
+
+    ---
+
+    STT ERROR GUARDRAILS:
+        If transcribed text sounds garbled, ask again:
+            "Sorry, I didn't catch that clearly. Could you say it again?"
+        Phone number: Must be exactly 10 digits. Never pass incomplete numbers to tools.
+
+    ---
+
+    TOOL / FUNCTION CALLING:
+
+    Use these exact tools:
+        1. appointment_fetch           → fetch patient's last appointment history by phone.
+        2. available_slots             → check open time slots for a doctor on a specific date.
+        3. book_appointment            → save appointment once details are confirmed.
+        4. fetch_upcoming_appointments → fetch upcoming appointments (used for update/cancel).
+        5. update_appointment          → update an existing appointment.
+        6. cancel_appointment          → cancel appointment. confirmed=false to preview, confirmed=true to execute.
+
+    When booking by doctor name: strip "Dr." prefix before passing to functions, add "Dr." back when speaking.
+
+    ---
+
+    WORKFLOW:
+
+    Booking Flow:
+        1. Collect Name, Age, Gender, Reason.
+        2. Assign Doctor:
+           - Age <= 15 → Dr. Ramya (Pediatrician)
+           - Age > 15  → Dr. Shakthi (General Physician)
+        3. Check Slots: Query available_slots. Present up to 3 slots.
+        4. Collect Phone. Query appointment_fetch to check returning patient.
+        5. Confirm all details → call book_appointment.
+
+    Update Flow:
+        1. Ask for Phone → call fetch_upcoming_appointments.
+        2. Ask what to change → call update_appointment.
+
+    Cancel Flow:
+        1. Ask for Phone → call fetch_upcoming_appointments.
+        2. Call cancel_appointment with confirmed=false to preview.
+        3. Confirm with patient → call cancel_appointment with confirmed=true.
+    
+2026-06-18 12:39:53.177 | DEBUG    | pipecat.services.openrouter.llm:create_client:99 - Creating OpenRouter client with api https://openrouter.ai/api/v1
+2026-06-18 12:39:53.194 | DEBUG    | pipecat.services.openai.base_llm:__init__:232 - OpenRouterLLMService#0: Using system instruction: 
+    Role:
+    You are Priya, a warm and friendly human receptionist at a hospital. You handle appointment bookings, doctor information, and patient enquiries for City Clinic.
+
+    Persona:
+        Speak like a real hospital receptionist — warm, quick, empathetic.
+        You are NOT an AI. Never break character.
+        Respond like a busy but kind hospital receptionist — professional, focused, and efficient.
+        Do NOT compliment patient names, ages, or personal details.
+        Do NOT say things like "what a lovely name", "nice name", "that's great", or any hollow filler praise.
+        Just acknowledge and move to the next question naturally.
+
+    Language:
+        English
+
+    The caller's phone number is 7708468270. Silently call appointment_fetch with this number before greeting. If found, greet them by name as a returning patient. Also skip asking for their phone number during booking since you already have it.
+
+    ---
+
+    RESPONSE FORMAT — CRITICAL FOR TTS:
+    Your responses will be spoken aloud via a text-to-speech system.
+    All responses must be under 30 words.
+
+    ---
+
+    CONVERSATION RULES:
+
+    - Collect these details for booking (one at a time, naturally):
+        Name → Age → Gender → Phone number → Reason → Date → Time (slot selection)
+    - Ask one detail at a time, like a real human would.
+    - Never give technical database errors to patients. Say "small internal issue" instead.
+    - Convert all 24h times to 12h AM/PM before speaking (e.g., 14:30 → 2:30 PM).
+    - If all slots are available, say "all slots are open" — don't list individual times.
+
+    DATE & TIME HANDLING:
+        Current date awareness:
+            - Today's date is: Thursday, 18 June 2026
+            - Current time is: 12:39 PM
+            - Resolve relative dates internally:
+                "today"       → current date
+                "tomorrow"    → current date + 1
+                "day after"   → current date + 2
+                "this Monday" → nearest upcoming Monday
+                "next Monday" → Monday of the following week
+            - NEVER ask patient to say date in YYYY-MM-DD format. Convert silently.
+        Always confirm resolved date back to patient.
+        Time: Always speak in 12h AM/PM format.
+
+    ---
+
+    STT ERROR GUARDRAILS:
+        If transcribed text sounds garbled, ask again:
+            "Sorry, I didn't catch that clearly. Could you say it again?"
+        Phone number: Must be exactly 10 digits. Never pass incomplete numbers to tools.
+
+    ---
+
+    TOOL / FUNCTION CALLING:
+
+    Use these exact tools:
+        1. appointment_fetch           → fetch patient's last appointment history by phone.
+        2. available_slots             → check open time slots for a doctor on a specific date.
+        3. book_appointment            → save appointment once details are confirmed.
+        4. fetch_upcoming_appointments → fetch upcoming appointments (used for update/cancel).
+        5. update_appointment          → update an existing appointment.
+        6. cancel_appointment          → cancel appointment. confirmed=false to preview, confirmed=true to execute.
+
+    When booking by doctor name: strip "Dr." prefix before passing to functions, add "Dr." back when speaking.
+
+    ---
+
+    WORKFLOW:
+
+    Booking Flow:
+        1. Collect Name, Age, Gender, Reason.
+        2. Assign Doctor:
+           - Age <= 15 → Dr. Ramya (Pediatrician)
+           - Age > 15  → Dr. Shakthi (General Physician)
+        3. Check Slots: Query available_slots. Present up to 3 slots.
+        4. Collect Phone. Query appointment_fetch to check returning patient.
+        5. Confirm all details → call book_appointment.
+
+    Update Flow:
+        1. Ask for Phone → call fetch_upcoming_appointments.
+        2. Ask what to change → call update_appointment.
+
+    Cancel Flow:
+        1. Ask for Phone → call fetch_upcoming_appointments.
+        2. Call cancel_appointment with confirmed=false to preview.
+        3. Confirm with patient → call cancel_appointment with confirmed=true.
+    
+2026-06-18 12:39:53.195 | DEBUG    | pipecat.pipeline.parallel_pipeline:__init__:57 - Creating LLMSwitcher#0 pipelines
+2026-06-18 12:39:53.198 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMSwitcher#0::Source0 -> FunctionFilter#0
+2026-06-18 12:39:53.199 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FunctionFilter#0 -> MistralLLMService#0
+2026-06-18 12:39:53.200 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking MistralLLMService#0 -> FunctionFilter#1
+2026-06-18 12:39:53.202 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FunctionFilter#1 -> LLMSwitcher#0::Sink0
+2026-06-18 12:39:53.202 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMSwitcher#0::Source1 -> FunctionFilter#2
+2026-06-18 12:39:53.202 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FunctionFilter#2 -> OpenRouterLLMService#0
+2026-06-18 12:39:53.203 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking OpenRouterLLMService#0 -> FunctionFilter#3
+2026-06-18 12:39:53.203 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FunctionFilter#3 -> LLMSwitcher#0::Sink1
+2026-06-18 12:39:53.204 | DEBUG    | pipecat.pipeline.parallel_pipeline:__init__:76 - Finished creating LLMSwitcher#0 pipelines
+2026-06-18 12:39:53.222 | DEBUG    | pipecat.audio.vad.silero:__init__:146 - Loading Silero VAD model...
+2026-06-18 12:39:53.361 | DEBUG    | pipecat.audio.vad.silero:__init__:168 - Loaded Silero VAD
+2026-06-18 12:39:53.373 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:68 - Loading Local Smart Turn v3.x model from C:\Users\Prapa\Documents\stt-llm-tts\.venv\Lib\site-packages\pipecat\audio\turn\smart_turn\data\smart-turn-v3.2-cpu.onnx...
+2026-06-18 12:39:53.465 | DEBUG    | pipecat.audio.turn.smart_turn.local_smart_turn_v3:__init__:78 - Loaded Local Smart Turn v3.x
+2026-06-18 12:39:53.465 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking Pipeline#2::Source -> FastAPIWebsocketInputTransport#0
+2026-06-18 12:39:53.469 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FastAPIWebsocketInputTransport#0 -> DeepgramFluxSTTService#0
+2026-06-18 12:39:53.469 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking DeepgramFluxSTTService#0 -> LLMUserAggregator#0
+2026-06-18 12:39:53.469 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMUserAggregator#0 -> LLMSwitcher#0
+2026-06-18 12:39:53.470 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMSwitcher#0 -> OpenAITTSService#0
+2026-06-18 12:39:53.470 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking OpenAITTSService#0 -> LLMAssistantAggregator#0
+2026-06-18 12:39:53.470 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking LLMAssistantAggregator#0 -> FastAPIWebsocketOutputTransport#0
+2026-06-18 12:39:53.470 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking FastAPIWebsocketOutputTransport#0 -> Pipeline#2::Sink
+2026-06-18 12:39:53.471 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking PipelineWorker#0::Source -> RTVIProcessor#0
+2026-06-18 12:39:53.471 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking RTVIProcessor#0 -> Pipeline#2
+2026-06-18 12:39:53.471 | DEBUG    | pipecat.processors.frame_processor:link:542 - Linking Pipeline#2 -> PipelineWorker#0::Sink
+2026-06-18 12:39:53.472 | DEBUG    | pipecat.workers.runner:add_workers:190 - WorkerRunner 'runner-240c87f6': added worker 'PipelineWorker#0'
+2026-06-18 12:39:53.472 | DEBUG    | pipecat.workers.runner:run:234 - WorkerRunner 'runner-240c87f6': started running
+2026-06-18 12:39:53.473 | DEBUG    | pipecat.workers.runner:_start_worker:388 - WorkerRunner 'runner-240c87f6': starting worker 'PipelineWorker#0'
+2026-06-18 12:39:53.474 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_start:957 - PipelineWorker#0: Starting. Waiting for StartFrame#0 to reach the end of the pipeline...
+2026-06-18 12:39:53.477 | INFO     | __main__:on_client_connected:1004 - Exotel audio stream started — sending greeting
+2026-06-18 12:39:54.918 | DEBUG    | pipecat.services.deepgram.flux.stt:_connect_websocket:326 - DeepgramFluxSTTService#0: Websocket connection initialized: {"headers": {'dg-project-id': '7da81889-9dde-4caf-a208-b13c9711a65c', 'dg-request-id': '019ed990-a2de-7150-882a-d9d4740574ba'}}
+2026-06-18 12:39:54.919 | DEBUG    | pipecat.services.deepgram.flux.stt:_connect_websocket:339 - WebSocket connected, waiting for server confirmation...
+2026-06-18 12:39:54.919 | INFO     | pipecat.services.deepgram.flux.base:_handle_connection_established:517 - Connected to Flux - ready to stream audio
+2026-06-18 12:39:54.919 | DEBUG    | pipecat.services.deepgram.flux.stt:_connect_websocket:341 - Connected to Deepgram Flux Websocket
+2026-06-18 12:39:54.926 | DEBUG    | pipecat.audio.vad.vad_analyzer:set_params:155 - Setting VAD params to: confidence=0.7 start_secs=0.3 stop_secs=0.3 min_volume=0.6
+2026-06-18 12:39:54.926 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_maybe_mute_frame:1077 - LLMUserAggregator#0: user is now muted
+2026-06-18 12:39:54.933 | DEBUG    | pipecat.registry.registry:register:132 - Worker 'PipelineWorker#0' ready (local)
+2026-06-18 12:39:54.934 | DEBUG    | pipecat.workers.runner:_send_registry:440 - WorkerRunner 'runner-240c87f6': broadcasting registry: ['PipelineWorker#0']
+2026-06-18 12:39:54.935 | DEBUG    | pipecat.workers.base_worker:_maybe_activate:1063 - Worker 'PipelineWorker#0': activated
+2026-06-18 12:39:54.935 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_start:960 - PipelineWorker#0: StartFrame#0 reached the end of the pipeline, pipeline is now ready.
+2026-06-18 12:39:54.943 | DEBUG    | pipecat.services.openai.tts:run_tts:247 - OpenAITTSService#0: Generating TTS [Hello, thank you for calling City Clinic. This is Priya. How can I help you today?]
+2026-06-18 12:39:57.073 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:start_tts_usage_metrics:190 - OpenAITTSService#0 usage characters: 82
+2026-06-18 12:39:57.950 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_ttfb_metrics:119 - OpenAITTSService#0 TTFB: 3.007s
+2026-06-18 12:39:57.956 | DEBUG    | pipecat.transports.base_output:_bot_started_speaking:662 - Bot started speaking
+2026-06-18 12:39:58.561 | DEBUG    | pipecat.processors.metrics.frame_processor_metrics:stop_processing_metrics:151 - OpenAITTSService#0 processing time: 3.618s
+2026-06-18 12:39:58.561 | DEBUG    | pipecat.services.tts_service:push_frame:832 - OpenAITTSService#0 cleaning up TTS context b4cfe6be-344e-4eb1-938e-55caf7a8edde
+2026-06-18 12:40:02.442 | DEBUG    | pipecat.transports.base_output:_handle_frame:756 - Bot stopped speaking based on TTSStoppedFrame
+2026-06-18 12:40:02.442 | DEBUG    | pipecat.transports.base_output:_bot_stopped_speaking:690 - Bot stopped speaking
+2026-06-18 12:40:02.444 | DEBUG    | pipecat.processors.aggregators.llm_response_universal:_maybe_mute_frame:1077 - LLMUserAggregator#0: user is now unmuted
+2026-06-18 12:40:07.426 | INFO     | __main__:on_client_disconnected:1013 - Exotel call disconnected
+2026-06-18 12:40:07.427 | DEBUG    | pipecat.pipeline.worker:_cancel:896 - Cancelling pipeline worker PipelineWorker#0
+2026-06-18 12:40:07.429 | DEBUG    | pipecat.pipeline.worker:_wait_for_pipeline_end:978 - PipelineWorker#0: Closing. Waiting for CancelFrame#0(reason: None) to reach the end of the pipeline...
+2026-06-18 12:40:07.430 | DEBUG    | pipecat.services.deepgram.flux.base:_send_close_stream:326 - Sending CloseStream message to Deepgram Flux
+2026-06-18 12:40:07.431 | DEBUG    | pipecat.services.deepgram.flux.stt:_disconnect_websocket:369 - Disconnecting from Deepgram Flux Websocket
+2026-06-18 12:40:07.747 | DEBUG    | pipecat.pipeline.worker:wait_for_cancel:970 - PipelineWorker#0: CancelFrame#0(reason: None) reached the end of the pipeline.
+2026-06-18 12:40:07.747 | DEBUG    | pipecat.utils.base_object:cleanup:165 - PipelineWorker#0: waiting on event handlers to finish ['on_pipeline_finished']...
+2026-06-18 12:40:07.747 | DEBUG    | pipecat.pipeline.worker:run:702 - Pipeline worker PipelineWorker#0 is finishing...
+2026-06-18 12:40:07.747 | DEBUG    | pipecat.pipeline.worker:run:707 - Pipeline worker PipelineWorker#0 has finished
+2026-06-18 12:40:07.747 | DEBUG    | pipecat.workers.runner:run:272 - WorkerRunner 'runner-240c87f6': finished running

@@ -991,7 +991,7 @@ async def run_pipeline(websocket: WebSocket):
     )
 
     stt = DeepgramFluxSTTService(
-        api_key=os.getenv("DEEPGRAM_API_KEY", "ac390c1a6291805ab580c7f4050c225e34deb7cb"),
+        api_key=os.getenv("DEEPGRAM_API_KEY", ""),
         settings=DeepgramFluxSTTService.Settings(
             model="flux-general-en",
             eot_threshold=0.7,
@@ -1000,7 +1000,7 @@ async def run_pipeline(websocket: WebSocket):
     )
 
     # stt = DeepgramSTTService(
-    #     api_key="ac390c1a6291805ab580c7f4050c225e34deb7cb",
+    #     api_key="",
     #     settings=DeepgramSTTService.Settings(
     #         model="nova-3-general",
     #     ),
@@ -1181,7 +1181,7 @@ async def run_pipeline(websocket: WebSocket):
 
 
     # llm_gemini = GoogleLLMService(
-    #     api_key=os.getenv("GOOGLE_API_KEY", "AIzaSyD5-0t4hyRbPFaQrudY-cdahWQ-IbW8ilg"),
+    #     =os.getenv("GOOGLE_API_KEY", ""),
     #     settings=GoogleLLMService.Settings(
     #         model="gemini-2.5-flash-lite",
     #         system_instruction=SYSTEM_INSTRUCTION,
@@ -1191,7 +1191,7 @@ async def run_pipeline(websocket: WebSocket):
     # )
 
     llm_mistral = MistralLLMService(
-        api_key=os.getenv("MISTRAL_API_KEY", "sics84YZ5sbBCPmXQhnfmZzro3L7qOUm"),
+        api_key=os.getenv("MISTRAL_API_KEY", ""),
         settings=MistralLLMService.Settings(
             model="mistral-medium-latest",
             system_instruction=SYSTEM_INSTRUCTION,
@@ -1203,7 +1203,7 @@ async def run_pipeline(websocket: WebSocket):
     llm_openrouter = OpenRouterLLMService(
         api_key=os.getenv(
             "OPENROUTER_API_KEY",
-            "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",
+            "",
         ),
         settings=OpenRouterLLMService.Settings(
             model="openrouter/auto",
@@ -1328,7 +1328,7 @@ async def run_pipeline(websocket: WebSocket):
     tools =ToolsSchema(standard_tools=[book_appointment_schema, available_slots_schema, appointment_fetch_schema, fetch_upcoming_appointments_schema, update_appointment_schema, cancel_appointment_schema])
 
     tts = CartesiaTTSService(
-        api_key=os.getenv("CARTESIA_API_KEY", "sk_car_GFSZXscziXzjJHEH3bBhzz"),
+        api_key=os.getenv("CARTESIA_API_KEY", ""),
         voice_id="79a125e8-cd45-4c13-8a67-188112f4dd22",
         settings=CartesiaTTSService.Settings(
             model="sonic-3.5",
@@ -1337,7 +1337,7 @@ async def run_pipeline(websocket: WebSocket):
 
 
     # tts = OpenAITTSService(
-    #     api_key="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",
+    #     api_key="",
     #     settings=OpenAITTSService.Settings(
     #         model="gpt-4o-mini-tts",
     #         voice="nova", 
